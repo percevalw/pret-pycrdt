@@ -178,6 +178,7 @@ async def test_new_transaction_multithreading():
     doc.unobserve(sid)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="Requires Python 3.9+")
 async def test_new_transaction_no_multithreading():
     doc = Doc(allow_multithreading=False)
     doc["map0"] = map0 = Map()

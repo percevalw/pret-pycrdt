@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ._array import Array as Array
 from ._array import ArrayEvent as ArrayEvent
 from ._array import TypedArray as TypedArray

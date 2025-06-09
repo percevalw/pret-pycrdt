@@ -18,20 +18,24 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos, windows]
+        os: [ubuntu-22.04, macos-latest, windows-latest]
         rust-version: [stable]
         python-version:
           - '3.7'
           - '3.8'
           - '3.9'
           - '3.10'
-          #- '3.11'
-          #- '3.12'
-          #- '3.13'
-          #- 'pypy3.9'
-          #- 'pypy3.10'
+          - '3.11'
+          - '3.12'
+          - '3.13'
+          - 'pypy3.9'
+          - 'pypy3.10'
+        # skip 3.7 for macos
+        exclude:
+          - os: macos-latest
+            python-version: '3.7'
 
-    runs-on: ${{ matrix.os }}-latest
+    runs-on: ${{ matrix.os }}
 
     steps:
     - name: Checkout repository
@@ -57,10 +61,15 @@ jobs:
       run: pip install -e ".[test]"
 
     - name: Check types
+      if: ${{ matrix.python-version >= '3.9' }}
       run: mypy python
 
-    - name: Run tests
-      if: ${{ !((matrix.python-version == '3.13') && (matrix.os == 'ubuntu')) }}
+    - name: Run tests without typing
+      if: ${{ !((matrix.python-version == '3.13') && (matrix.os == 'ubuntu')) && (matrix.python-version < ('3.9')) }}
+      run: pytest --color=yes -v tests -k "not test_type"
+
+    - name: Run tests with typing
+      if: ${{ !((matrix.python-version == '3.13') && (matrix.os == 'ubuntu')) && (matrix.python-version >= ('3.9')) }}
       run: pytest --color=yes -v tests
 
     - name: Run code coverage

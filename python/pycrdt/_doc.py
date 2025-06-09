@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import partial
 from typing import Any, Callable, Generic, Iterable, Type, TypeVar, Union, cast, overload
 
+import pydantic
 from anyio import BrokenResourceError, create_memory_object_stream
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from typing_extensions import Literal
@@ -19,6 +20,13 @@ from ._pycrdt import Doc as _Doc
 from ._pycrdt import SubdocsEvent, Subscription, TransactionEvent
 from ._pycrdt import Transaction as _Transaction
 from ._transaction import NewTransaction, ReadTransaction, Transaction
+
+try:
+    import importlib.metadata as importlib_metadata
+except ImportError:
+    import importlib_metadata  # type: ignore[no-redef]
+
+anyio_version = importlib_metadata.version("anyio")
 
 T = TypeVar("T", bound=BaseType)
 
@@ -184,7 +192,11 @@ class Doc(BaseDoc, Generic[T]):
         if self._Model is not None:
             twin_doc = cast(Doc, self._twin_doc)
             twin_doc.apply_update(update)
-            d = {k: twin_doc[k].to_py() for k in self._Model.model_fields}
+            if pydantic.__version__ > "2":
+                model_fields = self._Model.model_fields
+            else:
+                model_fields = self._Model.__fields__
+            d = {k: twin_doc[k].to_py() for k in model_fields}
             try:
                 self._Model(**d)
             except Exception as e:
@@ -379,9 +391,15 @@ class Doc(BaseDoc, Generic[T]):
         observe = self.observe_subdocs if subdocs else self.observe
         if not self._send_streams[subdocs]:
             self._event_subscription[subdocs] = observe(partial(self._send_event, subdocs))
-        send_stream, receive_stream = create_memory_object_stream[
-            Union[TransactionEvent, SubdocsEvent]
-        ](max_buffer_size=max_buffer_size)
+        if anyio_version > "4.0.0":
+            send_stream, receive_stream = create_memory_object_stream[
+                Union[TransactionEvent, SubdocsEvent]
+            ](max_buffer_size=max_buffer_size)
+        else:
+            send_stream, receive_stream = create_memory_object_stream(
+                max_buffer_size=max_buffer_size,
+                item_type=Union[TransactionEvent, SubdocsEvent],
+            )
         self._send_streams[subdocs].add(send_stream)
         return receive_stream
 
