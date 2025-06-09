@@ -8,7 +8,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Literal,
     Type,
     Union,
     cast,
@@ -19,6 +18,7 @@ from typing import (
 import anyio
 from anyio import BrokenResourceError, create_memory_object_stream
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
+from typing_extensions import Literal
 
 from ._pycrdt import Doc as _Doc
 from ._pycrdt import Subscription

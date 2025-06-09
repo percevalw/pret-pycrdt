@@ -3,11 +3,12 @@ from __future__ import annotations
 import copy
 import json
 from time import time
-from typing import Any, Callable, Literal, cast
+from typing import Any, Callable, cast
 from uuid import uuid4
 
 from anyio import TASK_STATUS_IGNORED, create_task_group, sleep
 from anyio.abc import TaskGroup, TaskStatus
+from typing_extensions import Literal
 
 from ._doc import Doc
 from ._sync import Decoder, Encoder, read_message

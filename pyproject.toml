@@ -14,7 +14,7 @@ readme = "README.md"
 keywords = [
     "crdt",
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.7"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -31,17 +31,17 @@ classifiers = [
 ]
 
 dependencies = [
-    "anyio >=4.4.0,<5.0.0",
+    "anyio<5.0.0",
     "importlib_metadata >=3.6; python_version<'3.10'",
 ]
 
 [project.optional-dependencies]
 test = [
-    "pytest >=8.3.5,<9",
+    "pytest<9",
     "pytest-mypy-testing",
     "anyio",
-    "trio >=0.25.1,<0.30",
-    "pydantic >=2.5.2,<3",
+    "trio<0.30",
+    "pydantic<3",
     "mypy",
     "coverage[toml] >=7",
     "exceptiongroup; python_version<'3.11'",
