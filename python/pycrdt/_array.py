@@ -368,7 +368,7 @@ class Array(BaseType, Generic[T]):
             if isinstance(val, BaseType):
                 py[idx] = val.to_py()
             elif isinstance(val, float) and val.is_integer():
-                py[idx] = int(val)
+                py[idx] = int(val)  # type: ignore[assignment]
         return py
 
     def observe(self, callback: Callable[[ArrayEvent], None]) -> Subscription:

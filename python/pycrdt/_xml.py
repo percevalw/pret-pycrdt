@@ -19,10 +19,12 @@ if TYPE_CHECKING:
 def _integrated_to_wrapper(
     doc: Doc, inner: _XmlText | _XmlElement | _XmlFragment
 ) -> XmlText | XmlElement | XmlFragment:
-    key = ("branch", inner.branch_id())
+    key = ("branch", doc.guid, inner.branch_id())
     cached = integrated_cache.get(key)
     if cached is not None:
+        assert isinstance(cached, (XmlText, XmlElement, XmlFragment))
         return cached
+    obj: XmlText | XmlElement | XmlFragment
     if isinstance(inner, _XmlElement):
         obj = XmlElement(_doc=doc, _integrated=inner)
     elif isinstance(inner, _XmlFragment):

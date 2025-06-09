@@ -7,7 +7,6 @@ use yrs::types::xml::{XmlEvent as _XmlEvent, XmlTextEvent as _XmlTextEvent};
 use yrs::{
     DeepObservable, GetString as _, Observable as _, Text as _, TransactionMut, Xml as _, XmlElementPrelim, XmlElementRef, XmlFragment as _, XmlFragmentRef, XmlOut, XmlTextPrelim, XmlTextRef
 };
-use yrs::branch::Branch;
 
 use crate::subscription::Subscription;
 use crate::type_conversions::{events_into_py, py_to_any, py_to_attrs, EntryChangeWrapper, ToPython};

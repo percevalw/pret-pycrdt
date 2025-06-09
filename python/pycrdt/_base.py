@@ -62,7 +62,7 @@ def _iter_children(obj: Any) -> Iterable[tuple[int | str, Any]]:
     from ._xml import XmlElement, XmlFragment
 
     if isinstance(obj, Doc):
-        for k in obj:
+        for k in obj.keys():
             yield k, obj[k]
     elif isinstance(obj, Map):
         for k in obj.keys():
@@ -89,7 +89,7 @@ def _find_path(doc: "Doc", target: Any) -> list[int | str]:
     raise ValueError("Object not found in document")
 
 
-def _get_by_path(doc: "Doc", path: Iterable[int | str]) -> Any:
+def _get_by_path(doc: "Doc", path: list[int | str]) -> Any:
     """Return the object at `path` inside `doc`."""
 
     obj: Any = doc
@@ -99,33 +99,23 @@ def _get_by_path(doc: "Doc", path: Iterable[int | str]) -> Any:
     from ._xml import XmlElement, XmlFragment
     for key in path:
         if isinstance(obj, Doc):
+            assert isinstance(key, str), "Doc keys must be strings"
             obj = obj[key]
         elif isinstance(obj, Map):
+            assert isinstance(key, str), "Map keys must be strings"
             obj = obj[key]
         elif isinstance(obj, Array):
+            assert isinstance(key, int), "Array keys must be integers"
             obj = obj[key]
         elif isinstance(obj, (XmlElement, XmlFragment)):
+            assert isinstance(key, int), "Xml items keys must be integers"
             obj = obj.children[key]
         else:
             raise TypeError(f"Cannot follow path segment {key!r} on {obj!r}")
     return obj
 
 
-def _rebuild_doc(update: bytes, roots: dict[str, type]) -> "Doc":
-    from ._doc import Doc
-
-    doc = Doc()
-    if update:
-        doc.apply_update(update)
-    for k, typ in roots.items():
-        try:
-            doc[k] = typ()
-        except Exception:
-            pass
-    return doc
-
-
-def _rebuild_obj(doc: "Doc", path: Iterable[int | str]) -> Any:
+def _rebuild_obj(doc: "Doc", path: list[int | str]) -> Any:
     return _get_by_path(doc, path)
 
 
@@ -162,11 +152,6 @@ class BaseDoc:
         self._subscriptions = []
         self._origins = {}
         self._allow_multithreading = allow_multithreading
-
-    def __reduce__(self):
-        roots = {k: type(v) for k, v in self.items()}
-        update = self.get_update()
-        return (_rebuild_doc, (update, roots))
 
 class BaseType(ABC):
     _doc: Doc | None
@@ -218,7 +203,7 @@ class BaseType(ABC):
         self._prelim = None
         self._integrated = integrated
         if _do_cache:
-            cache_key = ("type", integrated.branch_id())
+            cache_key = ("type", doc.guid, integrated.branch_id())
             integrated_cache[cache_key] = self
         return prelim
 
@@ -233,19 +218,20 @@ class BaseType(ABC):
         for k, v in base_types.items():
             if isinstance(obj, k):
                 cache_key: Any
+                res: BaseType | BaseDoc
                 if issubclass(v, BaseDoc):
-                    if _do_cache:
-                        cache_key = ("doc", obj.guid())
-                        cached = integrated_cache.get(cache_key, None)
-                        if cached is not None:
-                            return cached
+                    cache_key = ("doc", obj.guid())
+                    cached = integrated_cache.get(cache_key, None)
+                    if cached is not None:
+                        return cached
+                    # create a BaseDoc
                     res = v(doc=obj)
                 else:
-                    if _do_cache:
-                        cache_key = ("type", obj.branch_id())
-                        cached = integrated_cache.get(cache_key, None)
-                        if cached is not None:
-                            return cached
+                    cache_key = ("type", self.doc.guid, obj.branch_id())
+                    cached = integrated_cache.get(cache_key, None)
+                    if cached is not None:
+                        return cached
+                    # create a BaseType
                     res = v(_doc=self.doc, _integrated=obj)
                 if _do_cache:
                     integrated_cache[cache_key] = res
@@ -385,7 +371,7 @@ class BaseType(ABC):
         if self._doc is None:
             return type(self), (self.to_py(),)
         path = _find_path(self.doc, self)
-        return _rebuild_obj, (self.doc, tuple(path))
+        return _rebuild_obj, (self.doc, path)
 
 
 def observe_callback(
@@ -445,10 +431,23 @@ def process_event(value: Any, doc: Doc) -> Any:
         if val_type in base_types:
             if val_type is _Doc:
                 doc_type: type[BaseDoc] = cast(Type[BaseDoc], base_types[val_type])
-                value = doc_type(doc=value)
+                cache_key = ("doc", value.guid())
+                cached = integrated_cache.get(cache_key, None)
+                if cached is not None:
+                    value = cached
+                else:
+                    value = doc_type(doc=value)
+                    integrated_cache[cache_key] = value
             else:
                 base_type = cast(Type[BaseType], base_types[val_type])
-                value = base_type(_integrated=value, _doc=doc)
+                with no_cache():
+                    value = base_type(_doc=doc, _integrated=value)
+                cache_key = ("type", doc.guid, value.integrated.branch_id())
+                cached = integrated_cache.get(cache_key, None)
+                if cached is not None:
+                    value = cached
+                else:
+                    integrated_cache[cache_key] = value
     return value
 
 
