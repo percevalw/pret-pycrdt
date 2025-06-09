@@ -113,7 +113,7 @@ def test_api():
     nested_array = Array([1, 2, 3])
     map0.update({"baz": nested_array})
     v = map0.pop("baz")
-    assert v == [1.0, 2.0, 3.0]
+    assert v == [1, 2, 3]
     assert str(map0) == "{}"
 
     nested_map = Map({"x": "y"})
@@ -147,6 +147,8 @@ def test_observe():
 
     sub = map0.observe(partial(callback, events))
     map0["0"] = 0
+    # to_py returns integers when the value doesn't have a fractional part
+    # but to_json is handled in yrs and prints any non big-int number as a float
     assert (
         str(events[0])
         == """{target: {"0":0}, keys: {'0': {'action': 'add', 'newValue': 0.0}}, path: []}"""

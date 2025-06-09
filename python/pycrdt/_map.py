@@ -122,6 +122,8 @@ class Map(BaseType, Generic[T]):
         for key, val in py.items():
             if isinstance(val, BaseType):
                 py[key] = val.to_py()
+            elif isinstance(val, float) and val.is_integer():
+                py[key] = int(val)
         return py
 
     def __delitem__(self, key: str) -> None:

@@ -367,6 +367,8 @@ class Array(BaseType, Generic[T]):
         for idx, val in enumerate(py):
             if isinstance(val, BaseType):
                 py[idx] = val.to_py()
+            elif isinstance(val, float) and val.is_integer():
+                py[idx] = int(val)
         return py
 
     def observe(self, callback: Callable[[ArrayEvent], None]) -> Subscription:
