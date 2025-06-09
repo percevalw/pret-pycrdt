@@ -3,7 +3,6 @@ from __future__ import annotations
 from functools import partial
 from typing import Any, Callable, Generic, Iterable, Type, TypeVar, Union, cast, overload
 
-import pydantic
 from anyio import BrokenResourceError, create_memory_object_stream
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from typing_extensions import Literal
@@ -190,6 +189,9 @@ class Doc(BaseDoc, Generic[T]):
             update: The update to apply to the document.
         """
         if self._Model is not None:
+            # If we have a model set, it means we have pydantic
+            import pydantic
+
             twin_doc = cast(Doc, self._twin_doc)
             twin_doc.apply_update(update)
             if pydantic.__version__ > "2":

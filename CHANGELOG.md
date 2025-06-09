@@ -1,5 +1,9 @@
 # Version history
 
+## 0.12.20-post2
+
+- Fix optional pydantic import issue
+
 ## 0.12.20-post1
 
 - Add support for Python 3.7 and 3.8
