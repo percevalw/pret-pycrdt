@@ -18,8 +18,8 @@ class ConnectedDoc:
         self.doc = Doc()
         self.doc.observe(lambda event: self.send(event.update))
         self.connected_docs = []
-        self.send_stream, self.receive_stream = create_memory_object_stream[bytes](
-            max_buffer_size=1024
+        self.send_stream, self.receive_stream = create_memory_object_stream(
+            max_buffer_size=1024, item_type=bytes,
         )
 
     async def start(self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED):

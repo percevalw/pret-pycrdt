@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import AsyncExitStack, asynccontextmanager
 from logging import Logger, getLogger
-from typing import AsyncIterator, Protocol
+from typing import AsyncIterator
 
 from anyio import (
     TASK_STATUS_IGNORED,
@@ -11,6 +11,7 @@ from anyio import (
     create_task_group,
 )
 from anyio.abc import TaskGroup, TaskStatus
+from typing_extensions import Protocol
 
 from ._doc import Doc
 from ._sync import (

@@ -1,6 +1,6 @@
 [package]
-name = "pycrdt"
-version = "0.12.20"
+name = "pret-pycrdt"
+version = "0.12.20-post1"
 edition = "2021"
 
 [lib]

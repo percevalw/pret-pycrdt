@@ -31,6 +31,13 @@ from ._transaction import ReadTransaction, Transaction
 if TYPE_CHECKING:
     from ._doc import Doc
 
+try:
+    import importlib.metadata as importlib_metadata
+except ImportError:
+    import importlib_metadata  # type: ignore[no-redef]
+
+anyio_version = importlib_metadata.version("anyio")
+
 
 base_types: dict[Any, type[BaseType | BaseDoc]] = {}
 event_types: dict[Any, type[BaseEvent]] = {}
@@ -347,9 +354,15 @@ class BaseType(ABC):
         observe = self.observe_deep if deep else self.observe
         if not self._send_streams[deep]:
             self._event_subscription[deep] = observe(partial(self._send_event, deep))
-        send_stream, receive_stream = create_memory_object_stream[
-            Union[BaseEvent, list[BaseEvent]]
-        ](max_buffer_size=max_buffer_size)
+        if anyio_version > "4.0.0":
+            send_stream, receive_stream = create_memory_object_stream[
+                Union[BaseEvent, "list[BaseEvent]"]
+            ](max_buffer_size=max_buffer_size)
+        else:
+            send_stream, receive_stream = create_memory_object_stream(
+                max_buffer_size=max_buffer_size,
+                item_type=Union[BaseEvent, "list[BaseEvent]"],
+            )
         self._send_streams[deep].add(send_stream)
         return receive_stream
 
