@@ -7,7 +7,15 @@ from anyio import BrokenResourceError, create_memory_object_stream
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from typing_extensions import Literal
 
-from ._base import BaseDoc, BaseType, Typed, base_types, forbid_read_transaction
+from ._base import (
+    BaseDoc,
+    BaseType,
+    Typed,
+    _do_cache,
+    base_types,
+    forbid_read_transaction,
+    integrated_cache,
+)
 from ._pycrdt import Doc as _Doc
 from ._pycrdt import SubdocsEvent, Subscription, TransactionEvent
 from ._pycrdt import Transaction as _Transaction
@@ -259,14 +267,24 @@ class Doc(BaseDoc, Generic[T]):
     def _roots(self) -> dict[str, T]:
         with self.transaction() as txn:
             assert txn._txn is not None
-            return {
-                key: (
-                    None
-                    if val is None
-                    else cast(Type[T], base_types[type(val)])(_integrated=val, _doc=self)
-                )
-                for key, val in self._doc.roots(txn._txn).items()
-            }
+            roots: dict[str, T] = {}
+            for key, val in self._doc.roots(txn._txn).items():
+                if val is None:
+                    roots[key] = None
+                    continue
+                cache_key: Any
+                if _do_cache:
+                    cache_key = ("type", val.branch_id())
+                    cached = integrated_cache.get(cache_key)
+                    if cached is not None:
+                        roots[key] = cached  # type: ignore[assignment]
+                        continue
+                root_type = cast(Type[T], base_types[type(val)])
+                obj = root_type(_integrated=val, _doc=self)
+                if _do_cache:
+                    integrated_cache[cache_key] = obj
+                roots[key] = obj
+            return roots
 
     def observe(self, callback: Callable[[TransactionEvent], None]) -> Subscription:
         """

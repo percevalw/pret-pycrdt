@@ -31,6 +31,14 @@ impl Map {
 
 #[pymethods]
 impl Map {
+    fn branch_id(&self) -> (u64, u32, String) {
+        let id = self.map.as_ref().id();
+        match id {
+            yrs::branch::BranchID::Nested(inner) => (inner.client, inner.clock, String::new()),
+            yrs::branch::BranchID::Root(s) => (0, 0, s.to_string()),
+        }
+    }
+
     fn len(&self, txn: &mut Transaction)  -> PyResult<u32> {
         let mut t0 = txn.transaction();
         let t1 = t0.as_mut().unwrap();

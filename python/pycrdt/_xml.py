@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Iterator, overload
 
-from ._base import BaseEvent, BaseType, base_types, event_types
+from ._base import BaseEvent, BaseType, base_types, event_types, integrated_cache
 from ._pycrdt import XmlElement as _XmlElement
 from ._pycrdt import XmlEvent as _XmlEvent
 from ._pycrdt import XmlFragment as _XmlFragment
@@ -19,11 +19,17 @@ if TYPE_CHECKING:
 def _integrated_to_wrapper(
     doc: Doc, inner: _XmlText | _XmlElement | _XmlFragment
 ) -> XmlText | XmlElement | XmlFragment:
+    key = ("branch", inner.branch_id())
+    cached = integrated_cache.get(key)
+    if cached is not None:
+        return cached
     if isinstance(inner, _XmlElement):
-        return XmlElement(_doc=doc, _integrated=inner)
-    if isinstance(inner, _XmlFragment):
-        return XmlFragment(_doc=doc, _integrated=inner)
-    return XmlText(_doc=doc, _integrated=inner)
+        obj = XmlElement(_doc=doc, _integrated=inner)
+    elif isinstance(inner, _XmlFragment):
+        obj = XmlFragment(_doc=doc, _integrated=inner)
+    else:
+        obj = XmlText(_doc=doc, _integrated=inner)
+    return obj
 
 
 def _check_slice(value: Sized, key: slice) -> tuple[int, int]:

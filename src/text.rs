@@ -8,6 +8,7 @@ use yrs::{
     Text as _Text,
     TransactionMut,
 };
+use yrs::branch::Branch;
 use yrs::types::text::{TextEvent as _TextEvent, YChange};
 use crate::transaction::Transaction;
 use crate::subscription::Subscription;
@@ -29,6 +30,15 @@ impl Text {
 
 #[pymethods]
 impl Text {
+    fn branch_id(&self) -> (u64, u32, String) {
+        let branch: &yrs::branch::Branch = self.text.as_ref();
+        let id = branch.id();
+        match id {
+            yrs::branch::BranchID::Nested(inner) => (inner.client, inner.clock, String::new()),
+            yrs::branch::BranchID::Root(s) => (0, 0, s.to_string()),
+        }
+    }
+
     fn len(&self, txn: &mut Transaction)  -> PyResult<u32> {
         let mut t0 = txn.transaction();
         let t1 = t0.as_mut().unwrap();

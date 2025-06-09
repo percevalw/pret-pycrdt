@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import threading
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from functools import lru_cache, partial
 from inspect import signature
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Iterable,
     Type,
     Union,
     cast,
     get_type_hints,
     overload,
 )
+from weakref import WeakValueDictionary
 
 import anyio
 from anyio import BrokenResourceError, create_memory_object_stream
@@ -31,11 +34,99 @@ if TYPE_CHECKING:
 
 base_types: dict[Any, type[BaseType | BaseDoc]] = {}
 event_types: dict[Any, type[BaseEvent]] = {}
+integrated_cache: WeakValueDictionary[Any, BaseType | BaseDoc] = WeakValueDictionary()
+_do_cache = True
 
+
+
+@contextmanager
+def no_cache():
+    """Decorator to disable caching for a function."""
+    global _do_cache
+    _do_cache = False
+    try:
+        yield
+    finally:
+        _do_cache = True
 
 def forbid_read_transaction(txn: Transaction):
     if isinstance(txn, ReadTransaction):
         raise RuntimeError("Read-only transaction cannot be used to modify document structure")
+
+
+def _iter_children(obj: Any) -> Iterable[tuple[int | str, Any]]:
+    """Yield child key/value pairs for supported container types."""
+    from ._array import Array
+    from ._doc import Doc
+    from ._map import Map
+    from ._xml import XmlElement, XmlFragment
+
+    if isinstance(obj, Doc):
+        for k in obj:
+            yield k, obj[k]
+    elif isinstance(obj, Map):
+        for k in obj.keys():
+            yield k, obj[k]
+    elif isinstance(obj, Array):
+        for i in range(len(obj)):
+            yield i, obj[i]
+    elif isinstance(obj, (XmlElement, XmlFragment)):
+        children = obj.children
+        for i in range(len(children)):
+            yield i, children[i]
+
+
+def _find_path(doc: "Doc", target: Any) -> list[int | str]:
+    """Return the path to `target` within `doc`."""
+
+    stack: list[tuple[list[int | str], Any]] = [([], doc)]
+    while stack:
+        path, obj = stack.pop()
+        if obj is target:
+            return path
+        for key, child in _iter_children(obj):
+            stack.append((path + [key], child))
+    raise ValueError("Object not found in document")
+
+
+def _get_by_path(doc: "Doc", path: Iterable[int | str]) -> Any:
+    """Return the object at `path` inside `doc`."""
+
+    obj: Any = doc
+    from ._array import Array
+    from ._doc import Doc
+    from ._map import Map
+    from ._xml import XmlElement, XmlFragment
+    for key in path:
+        if isinstance(obj, Doc):
+            obj = obj[key]
+        elif isinstance(obj, Map):
+            obj = obj[key]
+        elif isinstance(obj, Array):
+            obj = obj[key]
+        elif isinstance(obj, (XmlElement, XmlFragment)):
+            obj = obj.children[key]
+        else:
+            raise TypeError(f"Cannot follow path segment {key!r} on {obj!r}")
+    return obj
+
+
+def _rebuild_doc(update: bytes, roots: dict[str, type]) -> "Doc":
+    from ._doc import Doc
+
+    doc = Doc()
+    if update:
+        doc.apply_update(update)
+    for k, typ in roots.items():
+        try:
+            doc[k] = typ()
+        except Exception:
+            pass
+    return doc
+
+
+def _rebuild_obj(doc: "Doc", path: Iterable[int | str]) -> Any:
+    return _get_by_path(doc, path)
 
 
 class BaseDoc:
@@ -62,6 +153,8 @@ class BaseDoc:
         if doc is None:
             doc = _Doc(client_id)
         self._doc = doc
+        if _do_cache:
+            integrated_cache[("doc", self._doc.guid())] = self
         self._txn = None
         self._txn_lock = threading.Lock()
         self._txn_async_lock = anyio.Lock()
@@ -70,6 +163,10 @@ class BaseDoc:
         self._origins = {}
         self._allow_multithreading = allow_multithreading
 
+    def __reduce__(self):
+        roots = {k: type(v) for k, v in self.items()}
+        update = self.get_update()
+        return (_rebuild_doc, (update, roots))
 
 class BaseType(ABC):
     _doc: Doc | None
@@ -120,6 +217,9 @@ class BaseType(ABC):
         self._doc = doc
         self._prelim = None
         self._integrated = integrated
+        if _do_cache:
+            cache_key = ("type", integrated.branch_id())
+            integrated_cache[cache_key] = self
         return prelim
 
     def _do_and_integrate(self, action: str, value: BaseType, txn: _Transaction, *args) -> None:
@@ -132,12 +232,27 @@ class BaseType(ABC):
     def _maybe_as_type_or_doc(self, obj: Any) -> Any:
         for k, v in base_types.items():
             if isinstance(obj, k):
+                cache_key: Any
                 if issubclass(v, BaseDoc):
-                    # create a BaseDoc
-                    return v(doc=obj)
-                # create a BaseType
-                return v(_doc=self.doc, _integrated=obj)
-        # that was a primitive value, just return it
+                    if _do_cache:
+                        cache_key = ("doc", obj.guid())
+                        cached = integrated_cache.get(cache_key, None)
+                        if cached is not None:
+                            return cached
+                    res = v(doc=obj)
+                else:
+                    if _do_cache:
+                        cache_key = ("type", obj.branch_id())
+                        cached = integrated_cache.get(cache_key, None)
+                        if cached is not None:
+                            return cached
+                    res = v(_doc=self.doc, _integrated=obj)
+                if _do_cache:
+                    integrated_cache[cache_key] = res
+                return res
+        # that was a primitive value, try to preserve integers
+        if isinstance(obj, float) and obj.is_integer():
+            return int(obj)
         return obj
 
     @property
@@ -266,6 +381,12 @@ class BaseType(ABC):
         if not send_streams:
             self.unobserve(self._event_subscription[deep])
 
+    def __reduce__(self):
+        if self._doc is None:
+            return type(self), (self.to_py(),)
+        path = _find_path(self.doc, self)
+        return _rebuild_obj, (self.doc, tuple(path))
+
 
 def observe_callback(
     callback: Callable[[], None] | Callable[[Any], None] | Callable[[Any, ReadTransaction], None],
@@ -298,7 +419,8 @@ class BaseEvent:
     def __init__(self, event: Any, doc: Doc):
         slot: str
         for slot in self.__slots__:
-            processed = process_event(getattr(event, slot), doc)
+            with no_cache():
+                processed = process_event(getattr(event, slot), doc)
             setattr(self, slot, processed)
 
     def __str__(self):
