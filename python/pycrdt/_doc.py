@@ -11,7 +11,6 @@ from ._base import (
     BaseDoc,
     BaseType,
     Typed,
-    _do_cache,
     base_types,
     forbid_read_transaction,
     integrated_cache,
@@ -22,6 +21,20 @@ from ._pycrdt import Transaction as _Transaction
 from ._transaction import NewTransaction, ReadTransaction, Transaction
 
 T = TypeVar("T", bound=BaseType)
+
+
+def _rebuild_doc(update: bytes, roots: dict[str, type]) -> "Doc":
+    from ._doc import Doc
+
+    doc: Doc = Doc()
+    if update:
+        doc.apply_update(update)
+    for k, typ in roots.items():
+        try:
+            doc[k] = typ()
+        except Exception:
+            pass
+    return doc
 
 
 class Doc(BaseDoc, Generic[T]):
@@ -272,17 +285,14 @@ class Doc(BaseDoc, Generic[T]):
                 if val is None:
                     roots[key] = None
                     continue
-                cache_key: Any
-                if _do_cache:
-                    cache_key = ("type", val.branch_id())
-                    cached = integrated_cache.get(cache_key)
-                    if cached is not None:
-                        roots[key] = cached  # type: ignore[assignment]
-                        continue
+                cache_key = ("type", self.guid, val.branch_id())
+                cached = integrated_cache.get(cache_key)
+                if cached is not None:
+                    roots[key] = cached  # type: ignore[assignment]
+                    continue
                 root_type = cast(Type[T], base_types[type(val)])
                 obj = root_type(_integrated=val, _doc=self)
-                if _do_cache:
-                    integrated_cache[cache_key] = obj
+                integrated_cache[cache_key] = obj
                 roots[key] = obj
             return roots
 
@@ -389,6 +399,11 @@ class Doc(BaseDoc, Generic[T]):
         if not send_streams:
             self.unobserve(self._event_subscription[subdocs])
 
+
+    def __reduce__(self):
+        roots = {k: type(v) for k, v in self.items()}
+        update = self.get_update()
+        return (_rebuild_doc, (update, roots))
 
 class TypedDoc(Typed):
     """

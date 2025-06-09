@@ -1,8 +1,7 @@
 import pickle
-import pytest
 
-from pycrdt import Doc, Map, Array
-from pycrdt._base import integrated_cache
+import pytest
+from pycrdt import Array, Doc, Map
 
 pytestmark = pytest.mark.anyio
 

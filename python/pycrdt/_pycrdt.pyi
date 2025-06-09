@@ -148,9 +148,11 @@ class Text:
         """Unsubscribes previously subscribed event callback identified by given
         `subscription`."""
 
+    def branch_id(self) -> tuple[int, int, str]:
+        """Identifier for the object"""
+
 class Array:
     """Shared array."""
-
     def len(self, txn: Transaction) -> int:
         """Returns the number of elements in the current array."""
 
@@ -181,6 +183,9 @@ class Array:
     def unobserve(self, subscription: Subscription) -> None:
         """Unsubscribes previously subscribed event callback identified by given
         `subscription`."""
+
+    def branch_id(self) -> tuple[int, int, str]:
+        """Identifier for the object"""
 
 class Map:
     """Shared map."""
@@ -213,6 +218,9 @@ class Map:
         """Unsubscribes previously subscribed event callback identified by given
         `subscription`."""
 
+    def branch_id(self) -> tuple[int, int, str]:
+        """Identifier for the object"""
+
 class XmlFragment:
     def parent(self) -> XmlFragment | XmlElement | XmlText | None:
         """Returns the parent of the XML fragment, if any."""
@@ -243,6 +251,9 @@ class XmlFragment:
         """Subscribes a callback to be called with the XML change event
         and its nested elements.
         Returns a subscription that can be used to unsubscribe."""
+
+    def branch_id(self) -> tuple[int, int, str]:
+        """Identifier for the object"""
 
 class XmlElement:
     def parent(self) -> XmlFragment | XmlElement | XmlText | None:
@@ -289,6 +300,9 @@ class XmlElement:
         """Subscribes a callback to be called with the XML change event
         and its nested elements.
         Returns a subscription that can be used to unsubscribe."""
+
+    def branch_id(self) -> tuple[int, int, str]:
+        """Identifier for the object"""
 
 class XmlText:
     def parent(self) -> XmlFragment | XmlElement | XmlText | None:
@@ -338,6 +352,9 @@ class XmlText:
         """Subscribes a callback to be called with the XML change event
         and its nested elements.
         Returns a subscription that can be used to unsubscribe."""
+
+    def branch_id(self) -> tuple[int, int, str]:
+        """Identifier for the object"""
 
 class UndoManager:
     """Undo manager."""

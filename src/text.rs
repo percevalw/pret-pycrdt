@@ -8,7 +8,6 @@ use yrs::{
     Text as _Text,
     TransactionMut,
 };
-use yrs::branch::Branch;
 use yrs::types::text::{TextEvent as _TextEvent, YChange};
 use crate::transaction::Transaction;
 use crate::subscription::Subscription;
