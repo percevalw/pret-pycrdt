@@ -23,10 +23,10 @@ class MyChannel(Channel):
         self.doc = Doc()
         self.doc.observe(self._on_doc_change)
         self._stream_to_remote = StapledObjectStream(
-            *create_memory_object_stream[bytes](float("inf"))
+            *create_memory_object_stream(float("inf"), item_type=bytes)
         )
         self._stream_from_remote = StapledObjectStream(
-            *create_memory_object_stream[bytes](float("inf"))
+            *create_memory_object_stream(float("inf"), item_type=bytes)
         )
 
     def _on_doc_change(self, event):

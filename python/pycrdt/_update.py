@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from ._pycrdt import get_state as _get_state
 from ._pycrdt import get_update as _get_update
 from ._pycrdt import merge_updates as _merge_updates

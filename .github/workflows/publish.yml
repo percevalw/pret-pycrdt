@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  PACKAGE_NAME: pycrdt
+  PACKAGE_NAME: pret-pycrdt
 
 jobs:
   macos:
@@ -28,11 +28,11 @@ jobs:
       - name: Build wheels - universal2
         uses: PyO3/maturin-action@v1
         with:
-          args: --release --target universal2-apple-darwin --out dist -i 3.9 3.10 3.11 3.12 3.13 pypy3.9 pypy3.10
+          args: --release --target universal2-apple-darwin --out dist -i 3.7 3.8 3.9 3.10 3.11 3.12 3.13 pypy3.9 pypy3.10
       - name: Test built wheel - universal2
         run: |
-          pip install pytest pytest-mypy-testing "pydantic>=2.5.2,<3" "anyio>=4.4.0,<5" "trio>=0.25.1,<0.30" "exceptiongroup; python_version<'3.11'"
-          pip install pycrdt --no-deps --no-index --find-links dist --force-reinstall
+          export VERSION=$(python3 -c "import re; print(re.search(r'version = \"(.+?)\"', open('Cargo.toml').read()).group(1))")
+          pip3 install "pret-pycrdt[test]==$VERSION" --find-links dist --force-reinstall
           pytest
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -47,9 +47,9 @@ jobs:
       matrix:
         platform:
           - target: x64
-            interpreter: 3.9 3.10 3.11 3.12 3.13
+            interpreter: 3.8 3.9 3.10 3.11 3.12 3.13
           - target: x86
-            interpreter: 3.9 3.10 3.11 3.12 3.13
+            interpreter: 3.8 3.9 3.10 3.11 3.12 3.13
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -63,9 +63,10 @@ jobs:
           target: ${{ matrix.platform.target }}
           args: --release --out dist -i ${{ matrix.platform.interpreter }}
       - name: Test built wheel
+        shell: pwsh
         run: |
-          pip install pytest pytest-mypy-testing "pydantic>=2.5.2,<3" "anyio>=4.4.0,<5" "trio>=0.25.1,<0.30" "exceptiongroup; python_version<'3.11'"
-          pip install pycrdt --no-deps --no-index --find-links dist --force-reinstall
+          $VERSION = (python3 -c "import re; print(re.search(r'version = `"(.+?)`"', open('Cargo.toml').read()).group(1))")
+          pip3 install "pret-pycrdt[test]==$VERSION" --find-links dist --force-reinstall
           pytest
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -96,12 +97,12 @@ jobs:
           rust-toolchain: stable
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --release --out dist -i 3.9 3.10 3.11 3.12 3.13 pypy3.9 pypy3.10
+          args: --release --out dist -i 3.7 3.8 3.9 3.10 3.11 3.12 3.13 pypy3.9 pypy3.10
       - name: Test built wheel
         if: matrix.target == 'x86_64'
         run: |
-          pip install pytest pytest-mypy-testing "pydantic>=2.5.2,<3" "anyio>=4.4.0,<5" "trio>=0.25.1,<0.30" "exceptiongroup; python_version<'3.11'"
-          pip install pycrdt --no-deps --no-index --find-links dist --force-reinstall
+          export VERSION=$(python3 -c "import re; print(re.search(r'version = \"(.+?)\"', open('Cargo.toml').read()).group(1))")
+          pip3 install "pret-pycrdt[test]==$VERSION" --find-links dist --force-reinstall
           pytest
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -125,7 +126,7 @@ jobs:
           rust-toolchain: stable
           target: ${{ matrix.target }}
           manylinux: auto
-          args: --release --out dist -i 3.9 3.10 3.11 3.12 3.13 pypy3.9 pypy3.10
+          args: --release --out dist -i 3.7 3.8 3.9 3.10 3.11 3.12 3.13 pypy3.9 pypy3.10
 
       - uses: uraimo/run-on-arch-action@v2.8.1
         name: Test built wheel
@@ -138,9 +139,9 @@ jobs:
             apt-get install -y --no-install-recommends python3 python3-pip
             pip3 install -U pip pytest pytest-mypy-testing "pydantic>=2.5.2,<3" "anyio>=4.4.0,<5" "trio>=0.25.1,<0.30" "exceptiongroup; python_version<'3.11'"
           run: |
-            pip3 install pycrdt --no-deps --no-index --find-links dist/ --force-reinstall
+            export VERSION=$(python3 -c "import re; print(re.search(r'version = \"(.+?)\"', open('Cargo.toml').read()).group(1))")
+            pip3 install "pret-pycrdt[test]==$VERSION" --find-links dist --force-reinstall
             pytest
-
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:

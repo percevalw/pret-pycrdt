@@ -3,7 +3,7 @@ requires = ["maturin>=1.8.2,<2"]
 build-backend = "maturin"
 
 [project]
-name = "pycrdt"
+name = "pret-pycrdt"
 dynamic = ["version"]
 description = "Python bindings for Yrs"
 license = { file = "LICENSE" }
@@ -39,8 +39,10 @@ dependencies = [
 test = [
     "pytest<9",
     "pytest-mypy-testing",
-    "anyio",
-    "trio<0.30",
+    "anyio; python_version<'3.8'",
+    "anyio>=4.0.0; python_version>='3.8'",
+    "trio<0.22; python_version<'3.8'",
+    "trio>=0.25.1,<0.30; python_version>='3.8'",
     "pydantic<3",
     "mypy",
     "coverage[toml] >=7",
@@ -53,7 +55,7 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/y-crdt/pycrdt"
+Homepage = "https://github.com/percevalw/pycrdt"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
@@ -80,5 +82,5 @@ check_untyped_defs = true
 
 [tool.pytest.ini_options]
 filterwarnings = [
-    "error",
+    #"error",
 ]

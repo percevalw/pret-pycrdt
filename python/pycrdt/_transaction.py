@@ -12,6 +12,14 @@ if TYPE_CHECKING:
     from ._doc import Doc
 
 
+try:
+    import importlib.metadata as importlib_metadata
+except ImportError:
+    import importlib_metadata  # type: ignore[no-redef]
+
+anyio_version = importlib_metadata.version("anyio")
+
+
 class Transaction:
     """
     A read-write transaction that can be used to mutate a document.
@@ -118,10 +126,13 @@ class NewTransaction(Transaction):
 
     async def __aenter__(self) -> Transaction:
         if self._doc._allow_multithreading:
-            if not await to_thread.run_sync(
-                partial(self._doc._txn_lock.acquire, timeout=self._timeout), abandon_on_cancel=True
-            ):
-                raise TimeoutError("Could not acquire transaction")
+            timed_acquired = partial(self._doc._txn_lock.acquire, timeout=self._timeout)
+            if anyio_version >= "4.0.0":
+                if not await to_thread.run_sync(timed_acquired, abandon_on_cancel=True):
+                    raise TimeoutError("Could not acquire transaction")
+            else:
+                if not await to_thread.run_sync(timed_acquired, cancellable=True):
+                    raise TimeoutError("Could not acquire transaction")
         else:
             await self._doc._txn_async_lock.acquire()
         return super().__enter__(_acquire_transaction=False)  # type: ignore[call-arg]

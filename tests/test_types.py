@@ -1,7 +1,8 @@
-from typing import TypedDict, cast
+from typing import cast
 
 import pytest
 from pycrdt import Array, Doc, Map, Text, TypedArray, TypedMap, TypedDoc
+from typing_extensions import TypedDict
 
 
 @pytest.mark.mypy_testing
