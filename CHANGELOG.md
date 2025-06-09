@@ -1,5 +1,11 @@
 # Version history
 
+## 0.12.20-post1
+
+- Add support for Python 3.7 and 3.8
+- Add shared type reference comparisons, meaning `doc1["key"] is doc1["key"]` now returns `True`
+- Add basic support for pickling `Doc` and `Map` and `Array` objects
+
 ## 0.12.20
 
 - Upgrade `yrs` to v0.23.4.
