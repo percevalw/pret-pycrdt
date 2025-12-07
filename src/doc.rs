@@ -35,7 +35,8 @@ impl Doc {
         if let Some(collection_id) = original.doc.collection_id() {
             options.collection_id = Some(collection_id);
         }
-        options.guid = original.doc.guid();
+        // Don't copy old guid: it's a new doc so it should have a new ID
+        // options.guid = original.doc.guid();
         let new_doc = yrs::Doc::with_options(options);
         // Encode the update from the snapshot
         let mut encoder = yrs::updates::encoder::EncoderV1::new();
