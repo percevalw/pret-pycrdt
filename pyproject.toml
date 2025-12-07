@@ -21,6 +21,8 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -38,7 +40,7 @@ dependencies = [
     "typing_extensions",
 ]
 
-[dependency-groups]
+[project.optional-dependencies]
 test = [
     "pytest<9",
     "pytest-mypy-testing",
@@ -54,6 +56,7 @@ test = [
 types = [
   "mypy >=1.19.0; python_version>='3.9'",
   "pytest-mypy-testing; python_version>='3.9'",
+  "pydantic<3",
 ]
 docs = [
     "mkdocs",

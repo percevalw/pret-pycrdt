@@ -37,7 +37,7 @@ micromamba install pip rust
 ```
 Then install `pycrdt` in editable mode:
 ```bash
-pip install -e . --group test --group types
+pip install -e ".[test,types]"
 ```
 This will build the Rust extension using [maturin](https://www.maturin.rs). If you make changes
 to the Python code only, you don't need to recompile anything, changes will be reflected the next

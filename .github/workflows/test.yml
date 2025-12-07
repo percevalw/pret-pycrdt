@@ -29,7 +29,6 @@ jobs:
           - '3.12'
           - '3.13'
           - '3.14'
-          - 'pypy3.11'
         # skip 3.7 for macos
         exclude:
           - os: macos-latest
@@ -47,9 +46,6 @@ jobs:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
 
-    - name: Ensure pip >= v25.1
-      run: python -m pip install "pip >= 25.1"
-
     - name: Install rust
       uses: actions-rs/toolchain@v1
       with:
@@ -64,13 +60,13 @@ jobs:
       run: pip install -e .
 
     - name: Check types
-      if: ${{ !(matrix.python-version == 'pypy3.11') }}
+      if: ${{ matrix.python-version != '3.7' && matrix.python-version != '3.8' && matrix.python-version != '3.9' }}
       run: |
-        pip install --group types -e .
+        pip install -e ".[types]"
         mypy python
 
     - name: Install test dependencies
-      run: pip install --group test -e .
+      run: pip install -e ".[test]"
 
     - name: Run tests
       if: ${{ !(((matrix.python-version == '3.14') && (matrix.os == 'ubuntu')) || (matrix.python-version == 'pypy3.11')) }}

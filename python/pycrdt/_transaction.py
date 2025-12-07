@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 try:
     import importlib.metadata as importlib_metadata
 except ImportError:
-    import importlib_metadata  # type: ignore[no-redef]
+    import importlib_metadata  # type: ignore[no-redef,import-not-found]
 
 anyio_version = importlib_metadata.version("anyio")
 

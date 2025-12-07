@@ -5,7 +5,6 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from functools import lru_cache, partial
 from inspect import signature
-from types import UnionType
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -14,8 +13,6 @@ from typing import (
     Type,
     Union,
     cast,
-    get_args,
-    get_origin,
     get_type_hints,
     overload,
 )
@@ -25,7 +22,7 @@ import anyio
 from anyio import BrokenResourceError, create_memory_object_stream
 from anyio.abc import TaskGroup
 from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
-from typing_extensions import Literal
+from typing_extensions import Literal, get_args, get_origin
 
 from ._pycrdt import Doc as _Doc
 from ._pycrdt import Subscription
@@ -39,7 +36,13 @@ if TYPE_CHECKING:
 try:
     import importlib.metadata as importlib_metadata
 except ImportError:
-    import importlib_metadata  # type: ignore[no-redef]
+    import importlib_metadata  # type: ignore[no-redef,import-not-found]
+
+try:
+    from types import UnionType
+except ImportError:
+    UnionType = None  # type: ignore[misc,assignment,no-redef]
+
 
 anyio_version = importlib_metadata.version("anyio")
 

@@ -1,5 +1,6 @@
 from functools import partial
 
+import sys
 import pytest
 from anyio import TASK_STATUS_IGNORED, Event, create_task_group, sleep
 from anyio.abc import TaskStatus
@@ -279,6 +280,10 @@ async def test_iterate_events():
     assert updates[1].endswith(b", World!\x00")
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 10),
+    reason="freezes the test suite on python 3.9 and below",
+)
 async def test_iterate_events_with_async_transactions():
     doc = Doc()
     updates = []
