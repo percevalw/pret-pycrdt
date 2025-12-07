@@ -192,9 +192,9 @@ def test_api():
     with pytest.raises(RuntimeError) as excinfo:
         array[::2] = 1
     assert str(excinfo.value) == "Step not supported"
-    with pytest.raises(RuntimeError) as excinfo:
+    with pytest.raises(TypeError) as excinfo:
         array[1:2] = 1
-    assert str(excinfo.value) == "Start and stop must be equal"
+    assert str(excinfo.value) == "'int' object is not iterable"
     with pytest.raises(RuntimeError) as excinfo:
         array[-1:-1] = 1
     assert str(excinfo.value) == "Index out of range"
@@ -235,6 +235,15 @@ def test_move():
     doc["array"] = array = Array([1, 2, 3, 4])
     array.move(1, 3)
     assert str(array) == "[1,3,2,4]"
+
+
+def test_slices_assignment():
+    doc = Doc()
+    doc["array"] = array = Array([0, 1, 2, 3, 4, 5])
+    array[2:2] = [10, 11]
+    assert str(array) == "[0,1,10,11,2,3,4,5]"
+    array[4:6] = [20, 21, 22]
+    assert str(array) == "[0,1,10,11,20,21,22,4,5]"
 
 
 def test_to_py():

@@ -5,10 +5,11 @@ build-backend = "maturin"
 [project]
 name = "pret-pycrdt"
 dynamic = ["version"]
-description = "Python bindings for Yrs"
+description = "Python bindings for Yrs, forked for Pret."
 license = { file = "LICENSE" }
 authors = [
     { name = "David Brochart", email = "david.brochart@gmail.com" },
+    { name = "Perceval Wajsburt", email = "perceval.wajsburt@gmail.com" },
 ]
 readme = "README.md"
 keywords = [
@@ -55,7 +56,7 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/percevalw/pycrdt"
+Homepage = "https://github.com/percevalw/pret-pycrdt"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

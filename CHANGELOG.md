@@ -1,5 +1,9 @@
 # Version history
 
+## Unreleased
+
+- Support array slice assignments with start != stop
+
 ## 0.12.20-post2
 
 - Fix optional pydantic import issue
