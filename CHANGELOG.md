@@ -3,6 +3,104 @@
 ## Unreleased
 
 - Support array slice assignments with start != stop
+- Merge y-crdt changes
+
+## 0.12.44
+
+- Expose `UndoManager` stack items.
+- Bump `yrs` to v0.25.0.
+
+## 0.12.43
+
+- Make `pycrdt` a namespace package.
+
+## 0.12.42
+
+- Bump `pyo3` to v0.27.1.
+
+## 0.12.41
+
+- Bump `pyo3` to v0.27.0.
+- Drop PyPy 3.10 support.
+
+## 0.12.40
+
+- Support Python v3.14.
+
+## 0.12.38
+
+- Improve error propagation with `PyResult`.
+- Cleanup transaction when commit fails.
+
+## 0.12.37
+
+- Drop Python 3.9 support.
+- Drop dependency on `importlib_metadata`.
+- Support async callbacks in `observe_subdocs`.
+- Allow iterating over a document events by registering async callbacks when async transactions are used.
+
+## 0.12.36
+
+- Support document change async callbacks.
+- Allow `get_state` and `get_update` to use an existing transaction.
+
+## 0.12.35
+
+- Bump `trio` to <0.32.
+
+## 0.12.34
+
+- Add snapshot support.
+- Install multiple Pythons to not rely on Windows hosted Python cache.
+
+## 0.12.32
+
+- Fix `skip_gc` in `Doc`.
+
+## 0.12.31
+
+- Expose `skip_gc` in `Doc`.
+
+## 0.12.30
+
+- Allow turning garbage collection off.
+
+## 0.12.29
+
+- Improve performance of `map.__contains__`.
+
+## 0.12.28
+
+- Upgrade `pyo3` to v0.26.0.
+
+## 0.12.27
+
+- Support XML `insert_embed` shared types.
+- Fix `UndoManager` with `XmlFragment`.
+
+## 0.12.26
+
+- Bump `trio` to <0.31.
+
+## 0.12.25
+
+- Allow XML attributes to be of any type.
+
+## 0.12.24
+
+- Upgrade `yrs` to v0.24.0.
+
+## 0.12.23
+
+- Support sticky index.
+
+## 0.12.22
+
+- Upgrade `yrs` to v0.23.5.
+
+## 0.12.21
+
+- Upgrade `pyo3` to v0.25.1.
 
 ## 0.12.20-post2
 

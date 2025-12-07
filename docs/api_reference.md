@@ -8,6 +8,7 @@
       - BaseType
       - Array
       - ArrayEvent
+      - Assoc
       - Awareness
       - Channel
       - Decoder
@@ -18,7 +19,9 @@
       - NewTransaction
       - Provider
       - ReadTransaction
+      - Snapshot
       - StackItem
+      - StickyIndex
       - Subscription
       - SubdocsEvent
       - Text

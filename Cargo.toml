@@ -1,6 +1,6 @@
 [package]
 name = "pret-pycrdt"
-version = "0.12.20-post2"
+version = "0.12.44-post1"
 edition = "2021"
 
 [lib]
@@ -8,7 +8,6 @@ name = "pycrdt"
 crate-type = ["cdylib"]
 
 [dependencies]
-yrs = "0.23.4"
-
-[dependencies.pyo3]
-version = "0.25.0"
+serde_json = "1.0.140"
+yrs = "0.25.0"
+pyo3 = "0.27.1"

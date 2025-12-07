@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sys
-
 import pytest
 from pycrdt import Array, Doc, Map, TypedArray, TypedDoc, TypedMap
 
@@ -55,7 +53,6 @@ class MyTypedDoc(MySubTypedDoc):
     my_array: MyTypedArray
 
 
-@pytest.mark.skipif(sys.version_info < (3, 10), reason="requires python3.10 or higher")
 def test_typed():
     doc = Doc()
     assert MyTypedDoc(doc)._ is doc

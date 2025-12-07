@@ -1,11 +1,29 @@
-from typing import Any, Callable, Iterator
+from typing import Any, Callable, Generic, Iterator, TypeVar
+
+class Snapshot:
+    """A snapshot of a document's state at a given point in time."""
+
+    @staticmethod
+    def from_doc(doc: "Doc") -> "Snapshot":
+        """Create a snapshot from a document."""
+
+    @staticmethod
+    def decode(data: bytes) -> "Snapshot":
+        """Decode a snapshot from its binary representation."""
+
+    def encode(self) -> bytes:
+        """Encode the snapshot to its binary representation."""
 
 class Doc:
     """Shared document."""
 
-    def __init__(self, client_id: int | None) -> None:
+    def __init__(self, client_id: int | None, skip_gc: bool | None) -> None:
         """Create a new document with an optional global client ID.
         If no client ID is passed, a random one will be generated."""
+
+    @staticmethod
+    def from_snapshot(snapshot: "Snapshot", doc: Doc) -> "Doc":
+        """Create a new Doc from a Snapshot and an original Doc."""
 
     def client_id(self) -> int:
         """Returns the document unique client identifier."""
@@ -31,10 +49,10 @@ class Doc:
     def get_or_insert_xml_fragment(self, txn: Transaction, name: str) -> XmlFragment:
         """Create an XML fragment root type on this document, or get an existing one."""
 
-    def get_state(self) -> bytes:
+    def get_state(self, txn: Transaction) -> bytes:
         """Get the current document state."""
 
-    def get_update(self, state: bytes) -> bytes:
+    def get_update(self, txn: Transaction, state: bytes) -> bytes:
         """Get the update from the given state to the current state."""
 
     def apply_update(self, txn: Transaction, update: bytes) -> None:
@@ -218,6 +236,9 @@ class Map:
         """Unsubscribes previously subscribed event callback identified by given
         `subscription`."""
 
+    def has(self, txn: Transaction, key: str) -> bool:
+        """Returns true if the given key exists in the map."""
+
     def branch_id(self) -> tuple[int, int, str]:
         """Identifier for the object"""
 
@@ -359,7 +380,14 @@ class XmlText:
 class UndoManager:
     """Undo manager."""
 
-    def __init__(self, doc: Doc, capture_timeout_millis, timestamp: Callable[[], int]) -> None:
+    def __init__(
+        self,
+        doc: Doc,
+        capture_timeout_millis: int,
+        timestamp: Callable[[], int],
+        undo_stack: list[StackItem] | None = None,
+        redo_stack: list[StackItem] | None = None,
+    ) -> None:
         """Creates an undo manager."""
 
     def expand_scope(self, scope: Text | Array | Map) -> None:
@@ -392,11 +420,73 @@ class UndoManager:
     def redo_stack(self) -> list[StackItem]:
         """Returns the undo manager's redo stack."""
 
-class StackItem:
+class DeleteSet:
+    """A set of deletions in a CRDT document."""
+
+    def __init__(self) -> None:
+        """Create a new empty DeleteSet."""
+
+    def encode(self) -> bytes:
+        """Encode the DeleteSet to bytes."""
+
+    @staticmethod
+    def decode(data: bytes) -> DeleteSet:
+        """Decode a DeleteSet from bytes."""
+
+MetaT = TypeVar("MetaT")
+
+class StackItem(Generic[MetaT]):
     """A unit of work for the [UndoManager][pycrdt.UndoManager], consisting of
     compressed information about all updates and deletions tracked by it.
     """
 
+    def __init__(
+        self, deletions: DeleteSet, insertions: DeleteSet, meta: MetaT | None = None
+    ) -> None:
+        """Create a new StackItem.
+
+        Args:
+            deletions: The DeleteSet of deletions.
+            insertions: The DeleteSet of insertions.
+            meta: Optional metadata (can be any Python object).
+        """
+
+    @property
+    def deletions(self) -> DeleteSet:
+        """Get the deletions DeleteSet."""
+
+    @property
+    def insertions(self) -> DeleteSet:
+        """Get the insertions DeleteSet."""
+
+    @property
+    def meta(self) -> MetaT | None:
+        """Custom metadata. Can be any Python object."""
+
+    @staticmethod
+    def merge(
+        a: "StackItem[MetaT]",
+        b: "StackItem[MetaT]",
+        merge_meta: Callable[[MetaT | None, MetaT | None], Any] | None = None,
+    ) -> "StackItem[Any]":
+        """Merge two StackItems into one containing the union of their deletions and insertions.
+
+        Args:
+            a: First StackItem to merge.
+            b: Second StackItem to merge.
+            merge_meta: Optional function to handle metadata conflicts.
+                Takes (meta_a, meta_b) and returns the merged metadata.
+                If None, keeps the first item's metadata.
+        """
+
+class StickyIndex:
+    def get_offset(self, txn: Transaction) -> int: ...
+    def encode(self) -> bytes: ...
+    def to_json_string(self) -> str: ...
+    def get_assoc(self) -> int: ...
+
 def merge_updates(updates: tuple[bytes, ...]) -> bytes: ...
 def get_state(update: bytes) -> bytes: ...
 def get_update(update: bytes, state: bytes) -> bytes: ...
+def decode_sticky_index(data: bytes) -> StickyIndex: ...
+def get_sticky_index_from_json_string(data: str) -> StickyIndex: ...
