@@ -146,12 +146,37 @@ jobs:
           run: |
             export VERSION=$(python3 -c "import re; print(re.search(r'version = \"(.+?)\"', open('Cargo.toml').read()).group(1))")
             pip3 install "pret-pycrdt[test]==$VERSION" --find-links dist --force-reinstall
-            pytest--ignore tests/test_types.py
+            pytest --ignore tests/test_types.py
       - name: Upload wheels
         uses: actions/upload-artifact@v5
         with:
           name: wheels-linux-cross-${{ matrix.target }}
           path: dist
+
+  pyodide:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Rust Nightly
+        run: |
+          rustup toolchain install nightly
+          rustup target add wasm32-unknown-emscripten --toolchain nightly
+          rustup default nightly
+
+      - name: Build Pyodide wheels
+        uses: pypa/cibuildwheel@v3.3.0
+        env:
+          CIBW_PLATFORM: pyodide
+          CIBW_ARCHS: auto
+          # disable wasm-opt step which causes issues (on 2025-12-08, emscripten 3.1.58, rustc 1.94.0-nightly)
+          CIBW_ENVIRONMENT: >
+            RUSTFLAGS="-C link-arg=-O1"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-pyodide
+          path: ./wheelhouse/*.whl
 
   pypi-release:
     name: Publish to PyPI

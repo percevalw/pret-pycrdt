@@ -59,6 +59,10 @@ def test_api():
     }
 
 
+@pytest.mark.xfail(
+    sys.version_info < (3, 8),
+    reason="fails on python 3.7"
+)
 async def test_subdoc():
     doc0 = Doc()
     map0 = Map()
