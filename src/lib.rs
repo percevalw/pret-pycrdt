@@ -8,11 +8,13 @@ mod text;
 mod array;
 mod map;
 mod transaction;
+mod sticky_index;
 mod subscription;
 mod type_conversions;
 mod undo;
 mod update;
 mod xml;
+mod snapshot;
 use crate::doc::Doc;
 use crate::doc::TransactionEvent;
 use crate::doc::SubdocsEvent;
@@ -20,9 +22,11 @@ use crate::text::{Text, TextEvent};
 use crate::array::{Array, ArrayEvent};
 use crate::map::{Map, MapEvent};
 use crate::transaction::Transaction;
+use crate::sticky_index::{StickyIndex, decode_sticky_index, get_sticky_index_from_json_string};
 use crate::subscription::Subscription;
-use crate::undo::{StackItem, UndoManager};
+use crate::undo::{StackItem, UndoManager, DeleteSet};
 use crate::update::{get_state, get_update, merge_updates};
+use crate::snapshot::Snapshot;
 
 #[pymodule]
 fn _pycrdt(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -37,14 +41,19 @@ fn _pycrdt(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<MapEvent>()?;
     m.add_class::<Transaction>()?;
     m.add_class::<StackItem>()?;
+    m.add_class::<DeleteSet>()?;
+    m.add_class::<StickyIndex>()?;
     m.add_class::<Subscription>()?;
     m.add_class::<UndoManager>()?;
     m.add_class::<XmlElement>()?;
     m.add_class::<XmlFragment>()?;
     m.add_class::<XmlText>()?;
     m.add_class::<XmlEvent>()?;
+    m.add_class::<Snapshot>()?;
     m.add_function(wrap_pyfunction!(get_state, m)?)?;
     m.add_function(wrap_pyfunction!(get_update, m)?)?;
     m.add_function(wrap_pyfunction!(merge_updates, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_sticky_index, m)?)?;
+    m.add_function(wrap_pyfunction!(get_sticky_index_from_json_string, m)?)?;
     Ok(())
 }

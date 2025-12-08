@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, Generic, TypeVar, cast, overload
 
-from ._base import BaseDoc, BaseEvent, BaseType, Typed, base_types, event_types
+from ._base import BaseDoc, BaseEvent, BaseType, Sequence, Typed, base_types, event_types
 from ._pycrdt import Array as _Array
 from ._pycrdt import ArrayEvent as _ArrayEvent
 from ._pycrdt import Subscription
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-class Array(BaseType, Generic[T]):
+class Array(Sequence, Generic[T]):
     """
     A collection used to store data in an indexed sequence structure, similar to a Python `list`.
     """
@@ -213,20 +213,29 @@ class Array(BaseType, Generic[T]):
         Raises:
             RuntimeError: Index must be of type integer.
         """
-        with self.doc.transaction():
+        with self.doc.transaction() as txn:
             if isinstance(key, int):
                 key = self._check_index(key)
                 del self[key]
                 self[key:key] = [value]
             elif isinstance(key, slice):
+                end = len(self)
+                start = key.start if key.start is not None else 0
+                stop = key.stop if key.stop is not None else end
                 if key.step is not None:
                     raise RuntimeError("Step not supported")
-                if key.start != key.stop:
-                    raise RuntimeError("Start and stop must be equal")
-                if key.start > len(self) or key.start < 0:
+                if start > len(self) or start < 0:
                     raise RuntimeError("Index out of range")
-                for i, v in enumerate(value):
-                    self._set(i + key.start, v)
+                iter_value = iter(value)
+                # remove existing elements
+                self.integrated.remove_range(
+                    txn._txn,
+                    start,
+                    stop - start,
+                )
+                # replace existing elements with new ones
+                for i, v in enumerate(iter_value):
+                    self._set(i + start, v)
             else:
                 raise RuntimeError("Index must be of type integer")
 
@@ -401,7 +410,7 @@ class ArrayIterator:
         self.idx = 0
 
     def __iter__(self) -> ArrayIterator:
-        return self
+        return self  # pragma: nocover
 
     def __next__(self) -> Any:
         if self.idx == self.length:

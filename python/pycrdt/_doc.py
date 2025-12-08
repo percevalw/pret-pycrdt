@@ -1,10 +1,21 @@
 from __future__ import annotations
 
 from functools import partial
-from typing import Any, Callable, Generic, Iterable, Type, TypeVar, Union, cast, overload
+from inspect import iscoroutinefunction
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Generic,
+    Iterable,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
 
-from anyio import BrokenResourceError, create_memory_object_stream
-from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from typing_extensions import Literal
 
 from ._base import (
@@ -18,16 +29,23 @@ from ._base import (
 from ._pycrdt import Doc as _Doc
 from ._pycrdt import SubdocsEvent, Subscription, TransactionEvent
 from ._pycrdt import Transaction as _Transaction
+from ._snapshot import Snapshot
 from ._transaction import NewTransaction, ReadTransaction, Transaction
+
+if TYPE_CHECKING:
+    from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 
 try:
     import importlib.metadata as importlib_metadata
 except ImportError:
-    import importlib_metadata  # type: ignore[no-redef]
+    import importlib_metadata  # type: ignore[no-redef,import-not-found]
 
 anyio_version = importlib_metadata.version("anyio")
 
 T = TypeVar("T", bound=BaseType)
+TransactionOrSubdocsEvent = TypeVar(
+    "TransactionOrSubdocsEvent", bound=Union[TransactionEvent, SubdocsEvent]
+)
 
 
 def _rebuild_doc(update: bytes, roots: dict[str, type]) -> "Doc":
@@ -59,6 +77,7 @@ class Doc(BaseDoc, Generic[T]):
         init: dict[str, T] = {},
         *,
         client_id: int | None = None,
+        skip_gc: bool | None = None,
         doc: _Doc | None = None,
         Model=None,
         allow_multithreading: bool = False,
@@ -67,10 +86,16 @@ class Doc(BaseDoc, Generic[T]):
         Args:
             init: The initial root types of the document.
             client_id: An optional client ID for the document.
+            skip_gc: Whether to skip garbage collection on deleted collections
+                on transaction commit.
             allow_multithreading: Whether to allow the document to be used in different threads.
         """
         super().__init__(
-            client_id=client_id, doc=doc, Model=Model, allow_multithreading=allow_multithreading
+            client_id=client_id,
+            skip_gc=skip_gc,
+            doc=doc,
+            Model=Model,
+            allow_multithreading=allow_multithreading,
         )
         for k, v in init.items():
             self[k] = v
@@ -169,7 +194,9 @@ class Doc(BaseDoc, Generic[T]):
         Returns:
             The current document state.
         """
-        return self._doc.get_state()
+        with self.transaction() as txn:
+            assert txn._txn is not None
+            return self._doc.get_state(txn._txn)
 
     def get_update(self, state: bytes | None = None) -> bytes:
         """
@@ -181,7 +208,9 @@ class Doc(BaseDoc, Generic[T]):
         """
         if state is None:
             state = b"\x00"
-        return self._doc.get_update(state)
+        with self.transaction() as txn:
+            assert txn._txn is not None
+            return self._doc.get_update(txn._txn, state)
 
     def apply_update(self, update: bytes) -> None:
         """
@@ -208,6 +237,19 @@ class Doc(BaseDoc, Generic[T]):
             forbid_read_transaction(txn)
             assert txn._txn is not None
             self._doc.apply_update(txn._txn, update)
+
+    @staticmethod
+    def from_snapshot(snapshot: "Snapshot", doc: "Doc") -> "Doc":
+        """
+        Create a new Doc from a Snapshot and an original Doc.
+        Args:
+            snapshot: The Snapshot to restore to.
+            doc: The original Doc to use for options/state.
+        Returns:
+            A new Doc instance restored to the snapshot state.
+        """
+        new_doc = _Doc.from_snapshot(snapshot._snapshot, doc._doc)
+        return Doc(doc=new_doc)
 
     def __setitem__(self, key: str, value: T) -> None:
         """
@@ -310,21 +352,44 @@ class Doc(BaseDoc, Generic[T]):
                 roots[key] = obj
             return roots
 
-    def observe(self, callback: Callable[[TransactionEvent], None]) -> Subscription:
+    def observe(
+        self,
+        callback: Callable[[TransactionEvent], None]
+        | Callable[[TransactionEvent], Awaitable[None]],
+    ) -> Subscription:
         """
         Subscribes a callback to be called with the document change event.
 
         Args:
             callback: The callback to call with the [TransactionEvent][pycrdt.TransactionEvent].
+                If the callback is async, async transactions must be used.
 
         Returns:
             The subscription that can be used to [unobserve()][pycrdt.Doc.unobserve].
         """
-        subscription = self._doc.observe(callback)
+        if iscoroutinefunction(callback):
+            cb = self._async_callback_to_sync(callback)
+        else:
+            cb = cast(Callable[[TransactionEvent], None], callback)
+        subscription = self._doc.observe(cb)
         self._subscriptions.append(subscription)
         return subscription
 
-    def observe_subdocs(self, callback: Callable[[SubdocsEvent], None]) -> Subscription:
+    def _async_callback_to_sync(
+        self,
+        async_callback: Callable[[TransactionOrSubdocsEvent], Awaitable[None]],
+    ) -> Callable[[TransactionOrSubdocsEvent], None]:
+        def callback(event: TransactionOrSubdocsEvent) -> None:
+            if self._task_group is None:
+                raise RuntimeError("Async callback in non-async transaction")
+            self._task_group.start_soon(async_callback, event)
+
+        return callback
+
+    def observe_subdocs(
+        self,
+        callback: Callable[[SubdocsEvent], None] | Callable[[SubdocsEvent], Awaitable[None]],
+    ) -> Subscription:
         """
         Subscribes a callback to be called with the document subdoc change event.
 
@@ -334,7 +399,11 @@ class Doc(BaseDoc, Generic[T]):
         Returns:
             The subscription that can be used to [unobserve()][pycrdt.Doc.unobserve].
         """
-        subscription = self._doc.observe_subdocs(callback)
+        if iscoroutinefunction(callback):
+            cb = self._async_callback_to_sync(callback)
+        else:
+            cb = cast(Callable[[SubdocsEvent], None], callback)
+        subscription = self._doc.observe_subdocs(cb)
         self._subscriptions.append(subscription)
         return subscription
 
@@ -353,6 +422,7 @@ class Doc(BaseDoc, Generic[T]):
         self,
         subdocs: Literal[False] = False,
         max_buffer_size: float = float("inf"),
+        async_transactions: bool = False,
     ) -> MemoryObjectReceiveStream[TransactionEvent]: ...
 
     @overload
@@ -360,12 +430,14 @@ class Doc(BaseDoc, Generic[T]):
         self,
         subdocs: Literal[True] = True,
         max_buffer_size: float = float("inf"),
+        async_transactions: bool = False,
     ) -> MemoryObjectReceiveStream[list[SubdocsEvent]]: ...
 
     def events(
         self,
         subdocs: bool = False,
         max_buffer_size: float = float("inf"),
+        async_transactions: bool = False,
     ):
         """
         Allows to asynchronously iterate over the document events, without using a callback.
@@ -386,13 +458,23 @@ class Doc(BaseDoc, Generic[T]):
             subdocs: Whether to iterate over the [SubdocsEvent][pycrdt.SubdocsEvent] events
                 (default is [TransactionEvent][pycrdt.TransactionEvent]).
             max_buffer_size: Maximum number of events that can be buffered.
+            async_transactions: Whether async transactions are used for this document,
+                in which case iterating over the events can put back-pressure on the
+                transactions (don't use an infinite `max_buffer_size` in this case).
 
         Returns:
             An async iterator over the document events.
         """
+        from anyio import create_memory_object_stream
+
         observe = self.observe_subdocs if subdocs else self.observe
         if not self._send_streams[subdocs]:
-            self._event_subscription[subdocs] = observe(partial(self._send_event, subdocs))
+            if async_transactions:
+                self._event_subscription[subdocs] = observe(
+                    partial(self._async_send_event, subdocs)
+                )
+            else:
+                self._event_subscription[subdocs] = observe(partial(self._send_event, subdocs))
         if anyio_version > "4.0.0":
             send_stream, receive_stream = create_memory_object_stream[
                 Union[TransactionEvent, SubdocsEvent]
@@ -406,6 +488,8 @@ class Doc(BaseDoc, Generic[T]):
         return receive_stream
 
     def _send_event(self, subdocs: bool, event: TransactionEvent | SubdocsEvent):
+        from anyio import BrokenResourceError
+
         to_remove: list[MemoryObjectSendStream[TransactionEvent | SubdocsEvent]] = []
         send_streams = self._send_streams[subdocs]
         for send_stream in send_streams:
@@ -419,11 +503,27 @@ class Doc(BaseDoc, Generic[T]):
         if not send_streams:
             self.unobserve(self._event_subscription[subdocs])
 
+    async def _async_send_event(self, subdocs: bool, event: TransactionEvent | SubdocsEvent):
+        from anyio import BrokenResourceError
+
+        to_remove: list[MemoryObjectSendStream[TransactionEvent | SubdocsEvent]] = []
+        send_streams = self._send_streams[subdocs]
+        for send_stream in send_streams:
+            try:
+                await send_stream.send(event)
+            except BrokenResourceError:
+                to_remove.append(send_stream)
+        for send_stream in to_remove:
+            send_stream.close()
+            send_streams.remove(send_stream)
+        if not send_streams:
+            self.unobserve(self._event_subscription[subdocs])
 
     def __reduce__(self):
         roots = {k: type(v) for k, v in self.items()}
         update = self.get_update()
         return (_rebuild_doc, (update, roots))
+
 
 class TypedDoc(Typed):
     """

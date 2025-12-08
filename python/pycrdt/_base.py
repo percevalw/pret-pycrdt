@@ -18,14 +18,12 @@ from typing import (
 )
 from weakref import WeakValueDictionary
 
-import anyio
-from anyio import BrokenResourceError, create_memory_object_stream
-from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
-from typing_extensions import Literal
+from typing_extensions import Literal, get_args, get_origin
 
 from ._pycrdt import Doc as _Doc
 from ._pycrdt import Subscription
 from ._pycrdt import Transaction as _Transaction
+from ._sticky_index import Assoc, StickyIndex
 from ._transaction import ReadTransaction, Transaction
 
 if TYPE_CHECKING:
@@ -34,9 +32,28 @@ if TYPE_CHECKING:
 try:
     import importlib.metadata as importlib_metadata
 except ImportError:
-    import importlib_metadata  # type: ignore[no-redef]
+    import importlib_metadata  # type: ignore[no-redef,import-not-found]
 
-anyio_version = importlib_metadata.version("anyio")
+
+try:
+    import anyio
+    from anyio import BrokenResourceError
+
+    anyio_version = importlib_metadata.version("anyio")
+except ImportError:
+    anyio = None  # type: ignore[misc,assignment,no-redef]
+    BrokenResourceError = Exception  # type: ignore[misc,assignment,no-redef]
+    anyio_version = "0.0.0"
+
+try:
+    from types import UnionType
+except ImportError:
+    UnionType = None  # type: ignore[misc,assignment,no-redef]
+
+if TYPE_CHECKING:
+    from anyio.abc import TaskGroup
+    from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
+
 
 
 base_types: dict[Any, type[BaseType | BaseDoc]] = {}
@@ -136,11 +153,13 @@ class BaseDoc:
     _Model: Any
     _subscriptions: list[Subscription]
     _origins: dict[int, Any]
+    _task_group: TaskGroup | None
 
     def __init__(
         self,
         *,
         client_id: int | None = None,
+        skip_gc: bool | None = None,
         doc: _Doc | None = None,
         Model=None,
         allow_multithreading: bool = False,
@@ -148,17 +167,18 @@ class BaseDoc:
     ) -> None:
         super().__init__(**data)
         if doc is None:
-            doc = _Doc(client_id)
+            doc = _Doc(client_id, skip_gc)
         self._doc = doc
         if _do_cache:
             integrated_cache[("doc", self._doc.guid())] = self
         self._txn = None
         self._txn_lock = threading.Lock()
-        self._txn_async_lock = anyio.Lock()
+        self._txn_async_lock = anyio.Lock() if anyio is not None else None
         self._Model = Model
         self._subscriptions = []
         self._origins = {}
         self._allow_multithreading = allow_multithreading
+        self._task_group = None
 
 class BaseType(ABC):
     _doc: Doc | None
@@ -351,6 +371,8 @@ class BaseType(ABC):
         Returns:
             An async iterator over the shared type events.
         """
+        from anyio import create_memory_object_stream
+
         observe = self.observe_deep if deep else self.observe
         if not self._send_streams[deep]:
             self._event_subscription[deep] = observe(partial(self._send_event, deep))
@@ -385,6 +407,24 @@ class BaseType(ABC):
             return type(self), (self.to_py(),)
         path = _find_path(self.doc, self)
         return _rebuild_obj, (self.doc, path)
+
+
+class Sequence(BaseType):
+    def sticky_index(self, index: int, assoc: Assoc = Assoc.AFTER) -> StickyIndex:
+        """
+        A permanent position that sticks to the same place even when
+        concurrent updates are made.
+
+        Args:
+            index: The index at which to stick.
+            assoc: The [Assoc][pycrdt.Assoc] specifying whether to stick to the location
+                before or after the index.
+
+        Returns:
+            A [StickyIndex][pycrdt.StickyIndex] that can be used to retrieve the index after
+            an update was applied.
+        """
+        return StickyIndex.new(self, index, assoc)
 
 
 def observe_callback(
@@ -500,10 +540,12 @@ class Typed:
             if key not in annotations:
                 raise AttributeError(f'"{type(self).mro()[0]}" has no attribute "{key}"')
             expected_type = annotations[key]
-            if hasattr(expected_type, "__origin__"):
-                expected_type = expected_type.__origin__
-            if hasattr(expected_type, "__args__"):
-                expected_types = expected_type.__args__
+            origin = get_origin(expected_type)
+            if origin in (Union, UnionType):
+                expected_types = get_args(expected_type)
+            elif origin is not None:
+                expected_type = origin
+                expected_types = (expected_type,)
             else:
                 expected_types = (expected_type,)
             if type(value) not in expected_types:

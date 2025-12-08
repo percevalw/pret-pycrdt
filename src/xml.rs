@@ -1,16 +1,34 @@
 use pyo3::prelude::*;
 use pyo3::IntoPyObjectExt;
 use pyo3::types::{PyBool, PyDict, PyIterator, PyList, PyString, PyTuple};
-use pyo3::{pyclass, pymethods, Bound, PyAny, PyObject, PyResult, Python};
+use pyo3::{pyclass, pymethods, Bound, PyAny, PyResult, Python};
 use yrs::types::text::YChange;
 use yrs::types::xml::{XmlEvent as _XmlEvent, XmlTextEvent as _XmlTextEvent};
 use yrs::{
-    DeepObservable, GetString as _, Observable as _, Text as _, TransactionMut, Xml as _, XmlElementPrelim, XmlElementRef, XmlFragment as _, XmlFragmentRef, XmlOut, XmlTextPrelim, XmlTextRef
+    ArrayPrelim,
+    MapPrelim,
+    TextPrelim,
+    DeepObservable,
+    GetString as _,
+    Observable as _,
+    Text as _,
+    TransactionMut,
+    Xml as _,
+    XmlElementPrelim,
+    XmlElementRef,
+    XmlFragment as _,
+    XmlFragmentRef,
+    XmlOut,
+    XmlTextPrelim,
+    XmlTextRef
 };
 
 use crate::subscription::Subscription;
 use crate::type_conversions::{events_into_py, py_to_any, py_to_attrs, EntryChangeWrapper, ToPython};
 use crate::transaction::Transaction;
+use crate::array::Array;
+use crate::map::Map;
+use crate::text::Text;
 
 /// Implements methods common to `XmlFragment`, `XmlElement`, and `XmlText`.
 macro_rules! impl_xml_methods {
@@ -88,24 +106,27 @@ macro_rules! impl_xml_methods {
             )?
 
             $(
-                fn attributes(&self, txn: &mut Transaction) -> Vec<(String, String)> {
+                fn attributes<'py>(&self, py: Python<'py>, txn: &mut Transaction) -> Vec<(String, Bound<'py, PyAny>)> {
                     let mut t0 = txn.transaction();
                     let t1 = t0.as_mut().unwrap();
                     let t = t1.as_ref();
-                    self.$xinner.attributes(t).map(|(k,v)| (String::from(k), v)).collect()
+                    self.$xinner
+                        .attributes(t)
+                        .map(|(k, v)| (String::from(k), v.into_py(py)))
+                        .collect()
                 }
 
-                fn attribute(&self, txn: &mut Transaction, name: &str) -> Option<String> {
+                fn attribute<'py>(&self, py: Python<'py>, txn: &mut Transaction, name: &str) -> Option<Bound<'py, PyAny>> {
                     let mut t0 = txn.transaction();
                     let t1 = t0.as_mut().unwrap();
                     let t = t1.as_ref();
-                    self.$xinner.get_attribute(t, name)
+                    Some(self.$xinner.get_attribute(t, name)?.into_py(py))
                 }
-            
-                fn insert_attribute(&self, txn: &mut Transaction, name: &str, value: &str) {
+
+                fn insert_attribute(&self, txn: &mut Transaction, name: &str, value: Bound<'_, PyAny>) {
                     let mut _t = txn.transaction();
                     let mut t = _t.as_mut().unwrap().as_mut();
-                    self.$xinner.insert_attribute(&mut t, name, value);
+                    self.$xinner.insert_attribute(&mut t, name, py_to_any(&value));
                 }
 
                 fn remove_attribute(&self, txn: &mut Transaction, name: &str) {
@@ -147,9 +168,9 @@ impl From<XmlFragmentRef> for XmlFragment {
 }
 
 impl_xml_methods!(XmlFragment[fragment, fragment: fragment] {
-    fn observe(&self, f: PyObject) -> Subscription {
+    fn observe(&self, f: Py<PyAny>) -> Subscription {
         self.fragment.observe(move |txn, e| {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let e = unsafe { XmlEvent::from_xml_event(e, txn, py) };
                 if let Err(err) = f.call1(py, (e,)) {
                     err.restore(py)
@@ -158,9 +179,9 @@ impl_xml_methods!(XmlFragment[fragment, fragment: fragment] {
         }).into()
     }
 
-    fn observe_deep(&self, f: PyObject) -> Subscription {
+    fn observe_deep(&self, f: Py<PyAny>) -> Subscription {
         self.fragment.observe_deep(move |txn, events| {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let events = events_into_py(py, txn, events);
                 if let Err(err) = f.call1(py, (events,)) {
                     err.restore(py);
@@ -187,9 +208,9 @@ impl_xml_methods!(XmlElement[element, fragment: element, xml: element] {
         self.element.try_tag().map(|s| String::from(&**s))
     }
 
-    fn observe(&self, f: PyObject) -> Subscription {
+    fn observe(&self, f: Py<PyAny>) -> Subscription {
         self.element.observe(move |txn, e| {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let e = unsafe { XmlEvent::from_xml_event(e, txn, py) };
                 if let Err(err) = f.call1(py, (e,)) {
                     err.restore(py)
@@ -198,9 +219,9 @@ impl_xml_methods!(XmlElement[element, fragment: element, xml: element] {
         }).into()
     }
 
-    fn observe_deep(&self, f: PyObject) -> Subscription {
+    fn observe_deep(&self, f: Py<PyAny>) -> Subscription {
         self.element.observe_deep(move |txn, events| {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let events = events_into_py(py, txn, events);
                 if let Err(err) = f.call1(py, (events,)) {
                     err.restore(py);
@@ -250,6 +271,51 @@ impl_xml_methods!(XmlText[text, xml: text] {
         Ok(())
     }
 
+    #[pyo3(signature = (txn, index, attrs=None))]
+    fn insert_array_prelim<'py>(&self, txn: &mut Transaction, index: u32, attrs: Option<Bound<'_, PyIterator>>) -> PyResult<Array> {
+        let mut _t = txn.transaction();
+        let mut t = _t.as_mut().unwrap().as_mut();
+        let integrated;
+        if let Some(attrs) = attrs {
+            let attrs = py_to_attrs(attrs)?;
+            integrated = self.text.insert_embed_with_attributes(&mut t, index, ArrayPrelim::default(), attrs);
+        } else {
+            integrated = self.text.insert_embed(&mut t, index, ArrayPrelim::default());
+        }
+        let shared = Array::from(integrated);
+        Ok(shared)
+    }
+
+    #[pyo3(signature = (txn, index, attrs=None))]
+    fn insert_map_prelim<'py>(&self, txn: &mut Transaction, index: u32, attrs: Option<Bound<'_, PyIterator>>) -> PyResult<Map> {
+        let mut _t = txn.transaction();
+        let mut t = _t.as_mut().unwrap().as_mut();
+        let integrated;
+        if let Some(attrs) = attrs {
+            let attrs = py_to_attrs(attrs)?;
+            integrated = self.text.insert_embed_with_attributes(&mut t, index, MapPrelim::default(), attrs);
+        } else {
+            integrated = self.text.insert_embed(&mut t, index, MapPrelim::default());
+        }
+        let shared = Map::from(integrated);
+        Ok(shared)
+    }
+
+    #[pyo3(signature = (txn, index, attrs=None))]
+    fn insert_text_prelim<'py>(&self, txn: &mut Transaction, index: u32, attrs: Option<Bound<'_, PyIterator>>) -> PyResult<Text> {
+        let mut _t = txn.transaction();
+        let mut t = _t.as_mut().unwrap().as_mut();
+        let integrated;
+        if let Some(attrs) = attrs {
+            let attrs = py_to_attrs(attrs)?;
+            integrated = self.text.insert_embed_with_attributes(&mut t, index, TextPrelim::default(), attrs);
+        } else {
+            integrated = self.text.insert_embed(&mut t, index, TextPrelim::default());
+        }
+        let shared = Text::from(integrated);
+        Ok(shared)
+    }
+
     fn remove_range(&self, txn: &mut Transaction, index: u32, len: u32) {
         let mut _t = txn.transaction();
         let mut t = _t.as_mut().unwrap().as_mut();
@@ -295,9 +361,9 @@ impl_xml_methods!(XmlText[text, xml: text] {
         ).unwrap()
     }
 
-    fn observe(&self, f: PyObject) -> Subscription {
+    fn observe(&self, f: Py<PyAny>) -> Subscription {
         self.text.observe(move |txn, e| {
-            Python::with_gil(|py| {
+            Python::attach(|py| {
                 let e = unsafe { XmlEvent::from_xml_text_event(e, txn, py) };
                 if let Err(err) = f.call1(py, (e,)) {
                     err.restore(py)
@@ -306,7 +372,7 @@ impl_xml_methods!(XmlText[text, xml: text] {
         }).into()
     }
 
-    fn observe_deep(&self, f: PyObject) -> Subscription {
+    fn observe_deep(&self, f: Py<PyAny>) -> Subscription {
         self.observe(f)
     }
 });
@@ -318,15 +384,15 @@ pub struct XmlEvent {
     txn: *const TransactionMut<'static>,
     transaction: Option<Py<Transaction>>,
     #[pyo3(get)]
-    children_changed: PyObject,
+    children_changed: Py<PyAny>,
     #[pyo3(get)]
-    target: PyObject,
+    target: Py<PyAny>,
     #[pyo3(get)]
-    path: PyObject,
+    path: Py<PyAny>,
     #[pyo3(get)]
-    delta: PyObject,
+    delta: Py<PyAny>,
     #[pyo3(get)]
-    keys: PyObject,
+    keys: Py<PyAny>,
 }
 
 impl XmlEvent {

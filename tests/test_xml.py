@@ -1,5 +1,5 @@
 import pytest
-from pycrdt import Array, Doc, Map, XmlElement, XmlFragment, XmlText
+from pycrdt import Array, Doc, Map, Text, XmlElement, XmlFragment, XmlText
 
 
 def test_plain_text():
@@ -139,6 +139,21 @@ def test_text():
         (" World!", {"href": "some-url"}),
     ]
 
+    array0 = Array(["foo", 2])
+    text.insert_embed(0, array0)
+    map0 = Map({"key": "val"})
+    text.insert_embed(0, map0)
+    text0 = Text("bar")
+    text.insert_embed(0, text0)
+    diff = text.diff()
+    assert type(diff[0][0]) is type(text0.integrated)
+    assert type(diff[1][0]) is type(map0.integrated)
+    assert type(diff[2][0]) is type(array0.integrated)
+    assert diff[3:] == [
+        ("dbye", None),
+        (" World!", {"href": "some-url"}),
+    ]
+
     with pytest.raises(RuntimeError):
         del text[0:5:2]
     with pytest.raises(RuntimeError):
@@ -149,6 +164,18 @@ def test_text():
         del text["invalid"]
 
     doc["test2"] = XmlFragment([XmlText()])
+
+
+def test_element_with_any_attribute():
+    doc = Doc()
+
+    doc["test"] = frag = XmlFragment()
+    el = XmlElement("div")
+    frag.children.append(el)
+    el.attributes["class"] = {"a": True}
+    assert el.attributes["class"] == {"a": True}
+    assert list(el.attributes) == [("class", {"a": True})]
+    assert len(el.attributes) == 1
 
 
 def test_element():

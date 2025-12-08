@@ -3,15 +3,16 @@ from __future__ import annotations
 import copy
 import json
 from time import time
-from typing import Any, Callable, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 from uuid import uuid4
 
-from anyio import TASK_STATUS_IGNORED, create_task_group, sleep
-from anyio.abc import TaskGroup, TaskStatus
 from typing_extensions import Literal
 
 from ._doc import Doc
 from ._sync import Decoder, Encoder, read_message
+
+if TYPE_CHECKING:
+    from anyio.abc import TaskGroup, TaskStatus
 
 
 class Awareness:
@@ -59,10 +60,15 @@ class Awareness:
     def _get_time(self) -> int:
         return int(time() * 1000)
 
-    async def start(self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED) -> None:
+    async def start(self, *, task_status: Optional[TaskStatus[None]]) -> None:
         """
         Starts updating the awareness periodically.
         """
+        from anyio import TASK_STATUS_IGNORED, create_task_group
+
+        if task_status is None:
+            task_status = TASK_STATUS_IGNORED
+
         if self._task_group is not None:
             raise RuntimeError("Awareness already started")
 
@@ -72,6 +78,8 @@ class Awareness:
             tg.start_soon(self._start)
 
     async def _start(self) -> None:
+        from anyio import sleep
+
         while True:
             await sleep(self._outdated_timeout / 1000 / 10)
             now = self._get_time()

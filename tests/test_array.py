@@ -4,7 +4,7 @@ from functools import partial
 import pytest
 from anyio import TASK_STATUS_IGNORED, Event, create_task_group
 from anyio.abc import TaskStatus
-from pycrdt import Array, Doc, Map, Text
+from pycrdt import Array, Assoc, Doc, Map, StickyIndex, Text
 
 pytestmark = pytest.mark.anyio
 
@@ -192,9 +192,9 @@ def test_api():
     with pytest.raises(RuntimeError) as excinfo:
         array[::2] = 1
     assert str(excinfo.value) == "Step not supported"
-    with pytest.raises(RuntimeError) as excinfo:
+    with pytest.raises(TypeError) as excinfo:
         array[1:2] = 1
-    assert str(excinfo.value) == "Start and stop must be equal"
+    assert str(excinfo.value) == "'int' object is not iterable"
     with pytest.raises(RuntimeError) as excinfo:
         array[-1:-1] = 1
     assert str(excinfo.value) == "Index out of range"
@@ -235,6 +235,15 @@ def test_move():
     doc["array"] = array = Array([1, 2, 3, 4])
     array.move(1, 3)
     assert str(array) == "[1,3,2,4]"
+
+
+def test_slices_assignment():
+    doc = Doc()
+    doc["array"] = array = Array([0, 1, 2, 3, 4, 5])
+    array[2:2] = [10, 11]
+    assert str(array) == "[0,1,10,11,2,3,4,5]"
+    array[4:6] = [20, 21, 22]
+    assert str(array) == "[0,1,10,11,20,21,22,4,5]"
 
 
 def test_to_py():
@@ -297,3 +306,33 @@ async def test_iterate_events():
     assert len(deltas_deep) == 1
     assert deltas_deep[0] == [{"retain": 1}, {"insert": ["Good"]}]
     assert paths_deep[0] == [1]
+
+
+@pytest.mark.parametrize("serialize", ["to_json", "encode"])
+def test_sticky_index(serialize: str):
+    first = ["$", "$", "$"]
+    second = ["-", "-", "-", "-", "-", "*", "-", "-"]
+    idx = second.index("*")
+
+    doc0 = Doc()
+    array0 = doc0.get("array", type=Array)
+    array0 += first
+
+    doc1 = Doc()
+    array1 = doc1.get("array", type=Array)
+    array1 += second
+
+    assert array1[idx] == "*"
+    sticky_index = array1.sticky_index(idx, Assoc.AFTER)
+    assert sticky_index.assoc == Assoc.AFTER
+    if serialize == "to_json":
+        data = sticky_index.to_json()
+        sticky_index = StickyIndex.from_json(data, array1)
+    else:
+        data = sticky_index.encode()
+        sticky_index = StickyIndex.decode(data, array1)
+
+    doc1.apply_update(doc0.get_update())
+    assert array1.to_py() in (first + second, second + first)
+    new_idx = sticky_index.get_index()
+    assert array1[new_idx] == "*"

@@ -5,10 +5,11 @@ build-backend = "maturin"
 [project]
 name = "pret-pycrdt"
 dynamic = ["version"]
-description = "Python bindings for Yrs"
+description = "Python bindings for Yrs, forked for Pret."
 license = { file = "LICENSE" }
 authors = [
     { name = "David Brochart", email = "david.brochart@gmail.com" },
+    { name = "Perceval Wajsburt", email = "perceval.wajsburt@gmail.com" },
 ]
 readme = "README.md"
 keywords = [
@@ -20,11 +21,14 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
@@ -33,6 +37,7 @@ classifiers = [
 dependencies = [
     "anyio<5.0.0",
     "importlib_metadata >=3.6; python_version<'3.10'",
+    "typing_extensions",
 ]
 
 [project.optional-dependencies]
@@ -42,11 +47,16 @@ test = [
     "anyio; python_version<'3.8'",
     "anyio>=4.0.0; python_version>='3.8'",
     "trio<0.22; python_version<'3.8'",
-    "trio>=0.25.1,<0.30; python_version>='3.8'",
+    "trio>=0.25.1,<0.33; python_version>='3.8'",
     "pydantic<3",
     "mypy",
     "coverage[toml] >=7",
     "exceptiongroup; python_version<'3.11'",
+]
+types = [
+  "mypy >=1.19.0; python_version>='3.9'",
+  "pytest-mypy-testing; python_version>='3.9'",
+  "pydantic<3",
 ]
 docs = [
     "mkdocs",
@@ -55,7 +65,7 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/percevalw/pycrdt"
+Homepage = "https://github.com/percevalw/pret-pycrdt"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

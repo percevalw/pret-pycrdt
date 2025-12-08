@@ -3,7 +3,16 @@ use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{PyValueError, PyTypeError};
 use pyo3::types::{PyList, PyString};
 use yrs::{
-    Any, Array as _Array, ArrayRef, DeepObservable, Doc as _Doc, Observable, TransactionMut, XmlFragmentPrelim
+    Any,
+    Array as _Array,
+    ArrayRef,
+    Assoc,
+    DeepObservable,
+    Doc as _Doc,
+    IndexedSequence,
+    Observable,
+    TransactionMut,
+    XmlFragmentPrelim,
 };
 use yrs::types::ToJson;
 use yrs::types::text::TextPrelim;
@@ -16,6 +25,7 @@ use crate::text::Text;
 use crate::map::Map;
 use crate::doc::Doc;
 use crate::xml::XmlFragment;
+use crate::sticky_index::StickyIndex;
 
 
 #[pyclass]
@@ -91,11 +101,11 @@ impl Array {
         Ok(shared)
     }
 
-    fn insert_xmlelement_prelim(&self, _txn: &mut Transaction, _index: u32) -> PyResult<PyObject> {
+    fn insert_xmlelement_prelim(&self, _txn: &mut Transaction, _index: u32) -> PyResult<Py<PyAny>> {
         Err(PyTypeError::new_err("Cannot insert an XmlElement into an array - insert it into an XmlFragment and insert that into the array"))
     }
 
-    fn insert_xmltext_prelim(&self, _txn: &mut Transaction, _index: u32) -> PyResult<PyObject> {
+    fn insert_xmltext_prelim(&self, _txn: &mut Transaction, _index: u32) -> PyResult<Py<PyAny>> {
         Err(PyTypeError::new_err("Cannot insert an XmlText into an array - insert it into an XmlFragment and insert that into the array"))
     }
 
@@ -144,10 +154,23 @@ impl Array {
         PyString::new(py, s.as_str())
     }
 
-    pub fn observe(&mut self, py: Python<'_>, f: PyObject) -> PyResult<Py<Subscription>> {
+    fn sticky_index<'py>(&self, py: Python<'py>, txn: &mut Transaction, index: u32, assoc: i8) -> PyResult<Py<StickyIndex>> {
+        let mut _t = txn.transaction();
+        let t = _t.as_mut().unwrap().as_mut();
+        let _assoc: Assoc;
+        match assoc {
+            0 => _assoc = Assoc::After,
+            _ => _assoc = Assoc::Before,
+        }
+        let sticky_index = self.array.sticky_index(t, index, _assoc);
+        let s: Py<StickyIndex> = Py::new(py, StickyIndex::from(sticky_index))?;
+        Ok(s)
+    }
+
+    pub fn observe(&mut self, py: Python<'_>, f: Py<PyAny>) -> PyResult<Py<Subscription>> {
         let sub = self.array
             .observe(move |txn, e| {
-                Python::with_gil(|py| {
+                Python::attach(|py| {
                     let event = ArrayEvent::new(e, txn);
                     if let Err(err) = f.call1(py, (event,)) {
                         err.restore(py)
@@ -158,10 +181,10 @@ impl Array {
         Ok(s)
     }
 
-    pub fn observe_deep(&mut self, py: Python<'_>, f: PyObject) -> PyResult<Py<Subscription>> {
+    pub fn observe_deep(&mut self, py: Python<'_>, f: Py<PyAny>) -> PyResult<Py<Subscription>> {
         let sub = self.array
             .observe_deep(move |txn, events| {
-                Python::with_gil(|py| {
+                Python::attach(|py| {
                     let events = events_into_py(py, txn, events);
                     if let Err(err) = f.call1(py, (events,)) {
                         err.restore(py)
@@ -177,10 +200,10 @@ impl Array {
 pub struct ArrayEvent {
     event: *const _ArrayEvent,
     txn: *const TransactionMut<'static>,
-    target: Option<PyObject>,
-    delta: Option<PyObject>,
-    path: Option<PyObject>,
-    transaction: Option<PyObject>,
+    target: Option<Py<PyAny>>,
+    delta: Option<Py<PyAny>>,
+    path: Option<Py<PyAny>>,
+    transaction: Option<Py<PyAny>>,
 }
 
 impl ArrayEvent {
@@ -202,7 +225,7 @@ impl ArrayEvent {
         unsafe { self.event.as_ref().unwrap() }
     }
 
-    fn txn(&self) -> &TransactionMut {
+    fn txn(&self) -> &TransactionMut<'_> {
         unsafe { self.txn.as_ref().unwrap() }
     }
 }
