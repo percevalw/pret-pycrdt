@@ -2,15 +2,8 @@ from __future__ import annotations
 
 from contextlib import AsyncExitStack, asynccontextmanager
 from logging import Logger, getLogger
-from typing import AsyncIterator
+from typing import TYPE_CHECKING, AsyncIterator
 
-from anyio import (
-    TASK_STATUS_IGNORED,
-    Event,
-    Lock,
-    create_task_group,
-)
-from anyio.abc import TaskGroup, TaskStatus
 from typing_extensions import Protocol
 
 from ._doc import Doc
@@ -21,6 +14,9 @@ from ._sync import (
     create_update_message,
     handle_sync_message,
 )
+
+if TYPE_CHECKING:
+    from anyio.abc import TaskGroup, TaskStatus
 
 
 class Channel(Protocol):
@@ -93,6 +89,8 @@ class Provider:
             channel: The `Channel` through which to connect the `Doc`.
             log: An optional logger.
         """
+        from anyio import Event, Lock
+
         self._doc = doc
         self._channel = channel
         self.log = log or getLogger(__name__)
@@ -147,6 +145,8 @@ class Provider:
 
     @asynccontextmanager
     async def _get_or_create_task_group(self) -> AsyncIterator[TaskGroup]:
+        from anyio import create_task_group
+
         if self._task_group is not None:
             yield self._task_group
             return
@@ -157,13 +157,18 @@ class Provider:
     async def start(
         self,
         *,
-        task_status: TaskStatus[None] = TASK_STATUS_IGNORED,
+        task_status: TaskStatus[None] | None = None,
     ) -> None:
         """Start the provider.
 
         Args:
             task_status: The status to set when the task has started.
         """
+        from anyio import TASK_STATUS_IGNORED
+
+        if task_status is None:
+            task_status = TASK_STATUS_IGNORED
+
         async with self._start_lock:
             async with self._get_or_create_task_group() as self._task_group:
                 task_status.started()

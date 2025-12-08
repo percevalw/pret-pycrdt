@@ -3,8 +3,12 @@ from __future__ import annotations
 from functools import partial
 from inspect import iscoroutinefunction
 from typing import (
+    TYPE_CHECKING,
     Any,
-    Awaitable, Callable, Generic, Iterable,
+    Awaitable,
+    Callable,
+    Generic,
+    Iterable,
     Type,
     TypeVar,
     Union,
@@ -12,8 +16,6 @@ from typing import (
     overload,
 )
 
-from anyio import BrokenResourceError, create_memory_object_stream
-from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from typing_extensions import Literal
 
 from ._base import (
@@ -29,6 +31,9 @@ from ._pycrdt import SubdocsEvent, Subscription, TransactionEvent
 from ._pycrdt import Transaction as _Transaction
 from ._snapshot import Snapshot
 from ._transaction import NewTransaction, ReadTransaction, Transaction
+
+if TYPE_CHECKING:
+    from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 
 try:
     import importlib.metadata as importlib_metadata
@@ -460,6 +465,8 @@ class Doc(BaseDoc, Generic[T]):
         Returns:
             An async iterator over the document events.
         """
+        from anyio import create_memory_object_stream
+
         observe = self.observe_subdocs if subdocs else self.observe
         if not self._send_streams[subdocs]:
             if async_transactions:
@@ -481,6 +488,8 @@ class Doc(BaseDoc, Generic[T]):
         return receive_stream
 
     def _send_event(self, subdocs: bool, event: TransactionEvent | SubdocsEvent):
+        from anyio import BrokenResourceError
+
         to_remove: list[MemoryObjectSendStream[TransactionEvent | SubdocsEvent]] = []
         send_streams = self._send_streams[subdocs]
         for send_stream in send_streams:
@@ -495,6 +504,8 @@ class Doc(BaseDoc, Generic[T]):
             self.unobserve(self._event_subscription[subdocs])
 
     async def _async_send_event(self, subdocs: bool, event: TransactionEvent | SubdocsEvent):
+        from anyio import BrokenResourceError
+
         to_remove: list[MemoryObjectSendStream[TransactionEvent | SubdocsEvent]] = []
         send_streams = self._send_streams[subdocs]
         for send_stream in send_streams:
@@ -508,11 +519,11 @@ class Doc(BaseDoc, Generic[T]):
         if not send_streams:
             self.unobserve(self._event_subscription[subdocs])
 
-
     def __reduce__(self):
         roots = {k: type(v) for k, v in self.items()}
         update = self.get_update()
         return (_rebuild_doc, (update, roots))
+
 
 class TypedDoc(Typed):
     """

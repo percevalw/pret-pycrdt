@@ -4,8 +4,6 @@ from functools import partial
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
-from anyio import create_task_group, to_thread
-
 from ._pycrdt import Transaction as _Transaction
 
 if TYPE_CHECKING:
@@ -95,6 +93,8 @@ class Transaction:
                 self._doc._txn = None
 
     async def __aenter__(self, _acquire_transaction: bool = True) -> Transaction:
+        from anyio import create_task_group
+
         if self._leases > 0 and self._doc._task_group is None:
             raise RuntimeError("Already in a non-async transaction")
         self._doc._task_group = await create_task_group().__aenter__()
@@ -147,6 +147,8 @@ class NewTransaction(Transaction):
     """
 
     async def __aenter__(self) -> Transaction:  # type: ignore[override]
+        from anyio import to_thread
+
         if self._doc._allow_multithreading:
             timed_acquired = partial(self._doc._txn_lock.acquire, timeout=self._timeout)
             if anyio_version >= "4.0.0":

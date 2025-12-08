@@ -18,10 +18,6 @@ from typing import (
 )
 from weakref import WeakValueDictionary
 
-import anyio
-from anyio import BrokenResourceError, create_memory_object_stream
-from anyio.abc import TaskGroup
-from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 from typing_extensions import Literal, get_args, get_origin
 
 from ._pycrdt import Doc as _Doc
@@ -38,13 +34,26 @@ try:
 except ImportError:
     import importlib_metadata  # type: ignore[no-redef,import-not-found]
 
+
+try:
+    import anyio
+    from anyio import BrokenResourceError
+
+    anyio_version = importlib_metadata.version("anyio")
+except ImportError:
+    anyio = None  # type: ignore[misc,assignment,no-redef]
+    BrokenResourceError = Exception  # type: ignore[misc,assignment,no-redef]
+    anyio_version = "0.0.0"
+
 try:
     from types import UnionType
 except ImportError:
     UnionType = None  # type: ignore[misc,assignment,no-redef]
 
+if TYPE_CHECKING:
+    from anyio.abc import TaskGroup
+    from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 
-anyio_version = importlib_metadata.version("anyio")
 
 
 base_types: dict[Any, type[BaseType | BaseDoc]] = {}
@@ -164,7 +173,7 @@ class BaseDoc:
             integrated_cache[("doc", self._doc.guid())] = self
         self._txn = None
         self._txn_lock = threading.Lock()
-        self._txn_async_lock = anyio.Lock()
+        self._txn_async_lock = anyio.Lock() if anyio is not None else None
         self._Model = Model
         self._subscriptions = []
         self._origins = {}
@@ -362,6 +371,8 @@ class BaseType(ABC):
         Returns:
             An async iterator over the shared type events.
         """
+        from anyio import create_memory_object_stream
+
         observe = self.observe_deep if deep else self.observe
         if not self._send_streams[deep]:
             self._event_subscription[deep] = observe(partial(self._send_event, deep))
