@@ -1,9 +1,10 @@
 # Version history
 
-## Unreleased
+## 0.12.44.post2
 
 - Support array slice assignments with start != stop
 - Merge y-crdt changes
+- Added pyodide distribution
 
 ## 0.12.44
 
